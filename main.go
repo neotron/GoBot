@@ -6,13 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
 	"github.com/bwmarrin/discordgo"
 )
 
 // Variables used for command line parameters
 var (
 	settingsFile string
-	dispatcher *MessageDispatcher
+	dispatcher   *MessageDispatcher
 )
 
 func init() {
@@ -57,9 +58,9 @@ func main() {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	dispatcher.Handle(s, m.Message)
+	dispatcher.Dispatch(s, m.Message)
 }
 
 func messageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
-	dispatcher.Handle(s, m.Message)
+	dispatcher.Dispatch(s, m.Message)
 }

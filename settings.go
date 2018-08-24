@@ -1,18 +1,18 @@
 package main
 
 import (
-	"os"
 	"encoding/json"
 	"fmt"
+	"os"
 )
 
 type jsonData struct {
-	Development bool
-	AuthToken string
-	CommandPrefix string
+	Development       bool
+	AuthToken         string
+	CommandPrefix     string
 	DatabaseDirectory string
 	ResourceDirectory string
-	OwnerIds []string
+	OwnerIds          []string
 }
 
 type Settings struct {
@@ -20,7 +20,7 @@ type Settings struct {
 }
 
 // Load the settings from a json file and stuff it into a new Settings object.
-func LoadSettings(settingsfile string) * Settings {
+func LoadSettings(settingsfile string) *Settings {
 	file, err := os.Open(settingsfile)
 	defer file.Close()
 	if err != nil {
@@ -38,7 +38,6 @@ func LoadSettings(settingsfile string) * Settings {
 	return settings
 }
 
-
 // Get the bot auth tooken
 func (s *Settings) AuthToken() string {
 	return s.data.AuthToken
@@ -53,4 +52,3 @@ func (s *Settings) CommandPrefix() string {
 func (s *Settings) IsDevelopment() bool {
 	return s.data.Development
 }
-
