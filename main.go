@@ -42,6 +42,8 @@ func main() {
 		return
 	}
 
+	defer dg.Close()
+
 	// create message dispatcher
 	dispatcher = CreateDispatcher(settings)
 
@@ -50,9 +52,6 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
-
-	// Cleanly close down the Discord session.
-	dg.Close()
 }
 
 // This function will be called (due to AddHandler above) every time a new
