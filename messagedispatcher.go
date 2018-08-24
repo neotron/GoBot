@@ -63,8 +63,7 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 	command := strings.ToLower(args[0])
 	args = args[1:]
 
-	commandHandlers := dispatcher.commandHandlers[command]
-	if commandHandlers != nil {
+	if commandHandlers := dispatcher.commandHandlers[command]; commandHandlers != nil {
 		log.Println("Found command handlers for", command)
 		funk.ForEach(commandHandlers, func(handler IMessageHandler) {
 			if handler.handleCommand(command, args, session, message) {
@@ -73,18 +72,18 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 			}
 		})
 	}
-	//
-	//for (prefix, handlers) in prefixHandlers {
-	//    if command.hasPrefix(prefix) {
-	//        LOG_DEBUG("Found prefix handler for \(prefix)")
-	//        for handler in handlers {
-	//            if handler.handlePrefix(prefix, command: command, args: args, message: messageWrapper) {
-	//                LOG_DEBUG("   => handled.")
-	//                return;
-	//            }
-	//        }
-	//    }
-	//}
+
+	funk.ForEach(dispatcher.prefixHandlers, func(prefix string, handlers []IMessageHandler) {
+		if strings.HasPrefix(command, prefix) {
+			log.Println("Found prefix handlers for", prefix)
+			funk.ForEach(handlers, func(handler IMessageHandler) {
+				if handler.handlePrefix(prefix, command, args, session, message) {
+					log.Println("   => handled.")
+					return
+				}
+			})
+		}
+	})
 	//
 	//for handler in anythingHandlers {
 	//    LOG_DEBUG("Trying anything handler \(handler)...")

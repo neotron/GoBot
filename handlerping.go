@@ -19,7 +19,13 @@ func (handler *PingHandler) commands() []MessageCommand {
 	}
 }
 
-func (handler *PingHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (handler *PingHandler) prefixes() []MessageCommand {
+	return []MessageCommand{
+		{"test", "Simple test prefix command"},
+	}
+}
+
+func (*PingHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
 	processed := false
 	switch command {
 	case "ping":
@@ -28,6 +34,21 @@ func (handler *PingHandler) handleCommand(command string, args []string, session
 	case "pong":
 		session.ChannelMessageSend(message.ChannelID, "Ping!")
 		processed = true
+	}
+	return processed
+}
+
+func (*PingHandler) handlePrefix(prefix string, command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+	processed := false
+	if prefix == "test" {
+		switch command {
+		case "testping":
+			session.ChannelMessageSend(message.ChannelID, "Pong!")
+			processed = true
+		case "testpong":
+			session.ChannelMessageSend(message.ChannelID, "Ping!")
+			processed = true
+		}
 	}
 	return processed
 }
