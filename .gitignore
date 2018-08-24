@@ -166,3 +166,4 @@ Temporary Items
 *.orig
 *.tmp
 
+/config-dev.json

@@ -1,0 +1,11 @@
+{
+  "development": true,
+  "authToken": "BOT TOKEN", 
+  "commandPrefix": "#",
+  "database_directory": "DATABASE DIR",
+  "resource_directory": "RESOURCE DIR", 
+  "owner_ids": [
+    "Discord ID", 
+    "of people capable of bot admin","
+  ]
+}
