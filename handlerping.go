@@ -12,14 +12,14 @@ func RegisterPingHandler(dispatcher *MessageDispatcher) {
 	dispatcher.Register(pingHandler)
 }
 
-func (handler *PingHandler) commands() []MessageCommand {
+func (*PingHandler) commands() []MessageCommand {
 	return []MessageCommand{
 		{"ping", "Simple command to check that bot is alive"},
 		{"pong", "Simple command to check that bot is alive"},
 	}
 }
 
-func (handler *PingHandler) prefixes() []MessageCommand {
+func (*PingHandler) prefixes() []MessageCommand {
 	return []MessageCommand{
 		{"test", "Simple test prefix command"},
 	}

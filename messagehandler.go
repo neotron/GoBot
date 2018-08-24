@@ -28,18 +28,17 @@ type IMessageHandler interface {
 }
 
 // Each message handler can process one or more commands / message responses
-type MessageHandler struct {
-}
+type MessageHandler struct{}
 
-func (handler *MessageHandler) handlePrefix(prefix string, command string, session []string, sess *discordgo.Session, message *discordgo.Message) bool {
+func (*MessageHandler) handlePrefix(prefix string, command string, session []string, sess *discordgo.Session, message *discordgo.Message) bool {
 	return false
 }
 
-func (handler *MessageHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (*MessageHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
 	return false
 }
 
-func (handler *MessageHandler) handleAnything(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (*MessageHandler) handleAnything(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
 	return false
 }
 
