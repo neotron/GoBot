@@ -22,6 +22,10 @@ type Message struct {
 	Args    []string
 }
 
+type Test interface {
+	cat() string
+}
+
 // Utility method to send quick reply back to the channel
 func (m Message) ReplyToChannel(format string, v ...interface{}) {
 	m.ChannelMessageSend(m.ChannelID, fmt.Sprintf(format, v...))

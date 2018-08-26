@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"GoBot/core"
-
 	"github.com/bwmarrin/discordgo"
 	"github.com/thoas/go-funk"
 )
@@ -14,6 +13,7 @@ import (
 // It also filters out any response from messages sent by itself, and which don't have the proper
 // Command prefix, as defined in the config file
 type MessageDispatcher struct {
+	NoOpMessageHandler
 	// allows prefix handling, i.e "randomcat" and "randomdog" could both go to a "random" prefix handler
 	prefixHandlers map[string][]MessageHandler
 	// requires either just the Command, i.e "route" or Command with arguments "route 32 2.3"
@@ -24,12 +24,18 @@ type MessageDispatcher struct {
 	commandHelp map[string]map[string][]string
 }
 
+// Object used for dispatching messages to the handlers.
 var Dispatcher = MessageDispatcher{
 	prefixHandlers:  map[string][]MessageHandler{},
 	commandHandlers: map[string][]MessageHandler{},
 	commandHelp:     map[string]map[string][]string{},
 }
 
+func init() {
+	Register(&Dispatcher, []MessageCommand{{"help", ""}}, nil, false)
+}
+
+// Register a new command handler with zero or more commands, prefix handlers and optional wildcard matching
 func Register(handler MessageHandler, commands, prefixes []MessageCommand, wildcard bool) {
 	for _, prefix := range prefixes {
 		Dispatcher.addHandlerForCommand(prefix, &Dispatcher.prefixHandlers, handler)
@@ -43,6 +49,11 @@ func Register(handler MessageHandler, commands, prefixes []MessageCommand, wildc
 		core.LogInfoF("Registered anything matcher: %s", toName(handler))
 		Dispatcher.anythingHandlers = append(Dispatcher.anythingHandlers, handler)
 	}
+}
+
+//
+func (d *MessageDispatcher) handleCommand(*Message) bool {
+	return false
 }
 
 func Dispatch(session *discordgo.Session, message *discordgo.Message) {

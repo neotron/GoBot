@@ -19,14 +19,24 @@ type animals struct {
 	dispatch.NoOpMessageHandler
 }
 
+func init() {
+	randomHelp := "Show image of random animal. Supports cat, dog, corgi, and kitten. Space between *random* and *animal* is optional."
+	dispatch.Register(&animals{},
+		[]dispatch.MessageCommand{
+			{"random", randomHelp},
+		}, []dispatch.MessageCommand{
+			{"random", ""},
+		}, false)
+}
+
 func (*animals) handlePrefix(prefix string, m *dispatch.Message) bool {
 	switch m.Command {
 	case "randomcat":
 		go handleRandomCat(m)
 	case "randomdog":
-		m.ReplyToChannel("http://www.randomdoggiegenerator.com/randomdoggie.php/%d.jpg", time.Now())
+		m.ReplyToChannel("http://www.randomdoggiegenerator.com/randomdoggie.php/%d.jpg", time.Now().Nanosecond())
 	case "randomkitten":
-		m.ReplyToChannel("http://www.randomkittengenerator.com/cats/rotator.php/%s.jpg", time.Now())
+		m.ReplyToChannel("http://www.randomkittengenerator.com/cats/rotator.php/%d.jpg", time.Now().Nanosecond())
 	case "randomcorgi":
 		go handleRandomCorgi(m)
 	default:
@@ -48,21 +58,10 @@ func (a *animals) handleCommand(m *dispatch.Message) bool {
 	}
 }
 
-func init() {
-	randomHelp := "Show image of random animal. Supports cat, dog, corgi, and kitten. Space between *random* and *animal* is optional."
-	dispatch.Register(&animals{},
-		[]dispatch.MessageCommand{
-			{"random", randomHelp},
-		}, []dispatch.MessageCommand{
-			{"random", ""},
-		}, false)
-}
-
-type meowModel struct {
-	File string
-}
-
 func handleRandomCat(m *dispatch.Message) {
+	type meowModel struct {
+		File string
+	}
 	res, err := http.Get("http://aws.random.cat/meow")
 	defer res.Body.Close()
 	if err != nil {
