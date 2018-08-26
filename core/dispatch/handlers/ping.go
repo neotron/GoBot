@@ -13,46 +13,46 @@ func init() {
 		[]dispatch.MessageCommand{
 			{"ping", "Simple command to check that bot is alive"},
 			{"pong", "Simple command to check that bot is alive"},
+			{"pingme", "Send a ping on a private message."},
 		},
 		[]dispatch.MessageCommand{{"test", "Simple test prefix command"}},
 		true)
 }
 
 func (*ping) handleCommand(m *dispatch.Message) bool {
-	processed := false
 	switch m.Command {
 	case "ping":
 		m.ReplyToChannel("Pong!")
-		processed = true
 	case "pong":
 		m.ReplyToChannel("Ping!")
-		processed = true
+	case "pingme":
+		m.ReplyToSender("Ping!")
+	default:
+		return false
 	}
-	return processed
+	return true
 }
 
 func (*ping) handlePrefix(prefix string, m *dispatch.Message) bool {
-	processed := false
 	switch m.Command {
 	case "testping":
 		m.ReplyToChannel("Pong!")
-		processed = true
 	case "testpong":
 		m.ReplyToChannel("Ping!")
-		processed = true
+	default:
+		return false
 	}
-	return processed
+	return true
 }
 
 func (*ping) handleAnything(m *dispatch.Message) bool {
-	processed := false
 	switch m.Command {
 	case "anyping":
 		m.ReplyToChannel("Pong!")
-		processed = true
 	case "anypong":
 		m.ReplyToChannel("Ping!")
-		processed = true
+	default:
+		return false
 	}
-	return processed
+	return true
 }

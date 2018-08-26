@@ -54,7 +54,7 @@ func init() {
 		[]dispatch.MessageCommand{
 			{"random", randomHelp},
 		}, []dispatch.MessageCommand{
-			{"random", randomHelp},
+			{"random", ""},
 		}, false)
 }
 

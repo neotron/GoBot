@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"fmt"
 	"strings"
 
 	"GoBot/core"
@@ -19,11 +20,14 @@ type MessageDispatcher struct {
 	commandHandlers map[string][]MessageHandler
 	// Anything matching
 	anythingHandlers []MessageHandler
+	// Command help
+	commandHelp map[string]map[string][]string
 }
 
 var Dispatcher = MessageDispatcher{
 	prefixHandlers:  map[string][]MessageHandler{},
 	commandHandlers: map[string][]MessageHandler{},
+	commandHelp:     map[string]map[string][]string{},
 }
 
 func Register(handler MessageHandler, commands, prefixes []MessageCommand, wildcard bool) {
@@ -46,7 +50,7 @@ func Dispatch(session *discordgo.Session, message *discordgo.Message) {
 }
 
 // Parse and dispatch the message.
-func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, message *discordgo.Message) {
+func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discordgo.Message) {
 	// Short-circuit if author of the message is the bot itself to avoid loops
 	if message.Author == nil || message.Author.ID == session.State.User.ID {
 		return
@@ -57,7 +61,10 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 	// Ensure that the string has the prefix we're programmed to listen to
 	trimmed := strings.TrimPrefix(message.Content, core.Settings.CommandPrefix())
 	if trimmed == message.Content {
-		return
+		isDM, err := comesFromDM(session, message)
+		if !isDM || err != nil {
+			return
+		}
 	}
 
 	// Split the Command into parameters, and clean them up.
@@ -75,7 +82,7 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 	command := strings.ToLower(args[0])
 	args = args[1:]
 	cmdMessage := &Message{message, session, command, args}
-	if commandHandlers := dispatcher.commandHandlers[command]; len(commandHandlers) > 0 {
+	if commandHandlers := d.commandHandlers[command]; len(commandHandlers) > 0 {
 		core.LogDebugF("Found %d Command handlers for %s.", len(commandHandlers), command)
 		for _, handler := range commandHandlers {
 			if handler.handleCommand(cmdMessage) {
@@ -85,7 +92,7 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 		}
 	}
 
-	for prefix, handlers := range dispatcher.prefixHandlers {
+	for prefix, handlers := range d.prefixHandlers {
 		if !strings.HasPrefix(command, prefix) {
 			continue
 		}
@@ -100,7 +107,7 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 		}
 	}
 
-	for _, handler := range dispatcher.anythingHandlers {
+	for _, handler := range d.anythingHandlers {
 		if core.IsLogDebug() {
 			core.LogDebugF("Trying anything handler %s...", toName(handler))
 		}
@@ -112,21 +119,32 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 }
 
 // Helper method to register a Command for a handler.
-func (dispatcher *MessageDispatcher) addHandlerForCommand(command MessageCommand, dict *map[string][]MessageHandler, handler MessageHandler) {
+func (d *MessageDispatcher) addHandlerForCommand(command MessageCommand, dict *map[string][]MessageHandler, handler MessageHandler) {
 	commandStr := strings.ToLower(command.Command)
 
-	// TODO: Help Strings
-	//if helpString := Command.Help, let group = handler.commandGroup {
-	//    if commandHelp[group] == nil {
-	//        commandHelp[group] = [commandStr: []]
-	//    } else if commandHelp[group]![commandStr] == nil {
-	//        commandHelp[group]![commandStr] = [String]()
-	//    }
-	//    commandHelp[group]?[commandStr]?.append("\t**\(Config.commandPrefix)\(commandStr)**: \(helpString)")
-	//}
+	helpString, group := command.Help, handler.CommandGroup()
+	if len(helpString) > 0 {
+		if d.commandHelp[group] == nil {
+			d.commandHelp[group] = map[string][]string{commandStr: {}}
+		} else if d.commandHelp[group][commandStr] == nil {
+			d.commandHelp[group][commandStr] = []string{}
+		}
+		d.commandHelp[group][commandStr] = append(d.commandHelp[group][commandStr], fmt.Sprint("\t**", core.Settings.CommandPrefix(), commandStr, "**: ", helpString, ""))
+	}
 
 	(*dict)[commandStr] = append((*dict)[commandStr], handler)
 	if core.IsLogInfo() {
 		core.LogInfoF("Registered Command: %s for %s", commandStr, toName(handler))
 	}
+}
+
+func comesFromDM(s *discordgo.Session, m *discordgo.Message) (bool, error) {
+	channel, err := s.State.Channel(m.ChannelID)
+	if err != nil {
+		if channel, err = s.Channel(m.ChannelID); err != nil {
+			return false, err
+		}
+	}
+
+	return channel.Type == discordgo.ChannelTypeDM, nil
 }
