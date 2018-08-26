@@ -69,8 +69,8 @@ func handleRandomCat(m *dispatch.Message) {
 		core.LogError("Failed to get meow: ", err)
 		return
 	}
-	decoder := json.NewDecoder(res.Body)
 	var model meowModel
+	decoder := json.NewDecoder(res.Body)
 	err = decoder.Decode(&model)
 	if err != nil || len(model.File) == 0 {
 		m.ReplyToChannel("The cats were not parsable today. :-(")

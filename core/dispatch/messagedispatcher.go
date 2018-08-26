@@ -92,8 +92,11 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 
 	core.LogDebug("Got message: ", message.Content)
 
-	// Ensure that the string has the prefix we're programmed to listen to
-	trimmed := strings.TrimPrefix(message.Content, core.Settings.CommandPrefix())
+	// This handles @BotName command trimming
+	trimmed := strings.TrimPrefix(message.Content, fmt.Sprintf("<@%s> ", session.State.User.ID))
+	// And this will trim the configured command prefix, which is optional if @Bot syntax is used
+	trimmed = strings.TrimPrefix(trimmed, core.Settings.CommandPrefix())
+	// And finally, if we didn't trim anything, check to see if it was a DM.
 	if trimmed == message.Content {
 		isDM, err := comesFromDM(session, message)
 		if !isDM || err != nil {
