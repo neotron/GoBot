@@ -9,8 +9,8 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/neotron/GoBot/core"
-	"github.com/neotron/GoBot/dispatch"
-	_ "github.com/neotron/GoBot/handlers"
+	"github.com/neotron/GoBot/core/dispatch"
+	_ "github.com/neotron/GoBot/core/handlers"
 )
 
 // Variables used for command line parameters

@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bwmarrin/discordgo"
 	"github.com/neotron/GoBot/core"
+
+	"github.com/bwmarrin/discordgo"
 	"github.com/thoas/go-funk"
 )
 

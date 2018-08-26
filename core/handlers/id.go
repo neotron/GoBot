@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/neotron/GoBot/dispatch"
+	"github.com/neotron/GoBot/core/dispatch"
 	"github.com/thoas/go-funk"
 )
 

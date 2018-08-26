@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"github.com/bwmarrin/discordgo"
-	"github.com/neotron/GoBot/dispatch"
+	"github.com/neotron/GoBot/core/dispatch"
 )
 
 type ping struct {
