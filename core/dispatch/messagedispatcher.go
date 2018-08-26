@@ -1,44 +1,43 @@
 package dispatch
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/neotron/GoBot/core"
+	"GoBot/core"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/thoas/go-funk"
 )
 
-// This class will parse and dispatch commands to the appropriate command handler.
+// This class will parse and dispatch commands to the appropriate Command handler.
 // It also filters out any response from messages sent by itself, and which don't have the proper
-// command prefix, as defined in the config file
+// Command prefix, as defined in the config file
 type MessageDispatcher struct {
 	// allows prefix handling, i.e "randomcat" and "randomdog" could both go to a "random" prefix handler
-	prefixHandlers map[string][]IMessageHandler
-	// requires either just the command, i.e "route" or command with arguments "route 32 2.3"
-	commandHandlers map[string][]IMessageHandler
+	prefixHandlers map[string][]MessageHandler
+	// requires either just the Command, i.e "route" or Command with arguments "route 32 2.3"
+	commandHandlers map[string][]MessageHandler
 	// Anything matching
-	anythingHandlers []IMessageHandler
+	anythingHandlers []MessageHandler
 }
 
 var Dispatcher = MessageDispatcher{
-	prefixHandlers:   map[string][]IMessageHandler{},
-	commandHandlers:  map[string][]IMessageHandler{},
-	anythingHandlers: []IMessageHandler{},
+	prefixHandlers:  map[string][]MessageHandler{},
+	commandHandlers: map[string][]MessageHandler{},
 }
 
-func Register(handler IMessageHandler, commands, prefixes []MessageCommand, wildcard bool) {
-	funk.ForEach(prefixes, func(prefix MessageCommand) {
+func Register(handler MessageHandler, commands, prefixes []MessageCommand, wildcard bool) {
+	for _, prefix := range prefixes {
 		Dispatcher.addHandlerForCommand(prefix, &Dispatcher.prefixHandlers, handler)
-	})
+	}
 
-	funk.ForEach(commands, func(cmd MessageCommand) {
-		Dispatcher.addHandlerForCommand(cmd, &Dispatcher.commandHandlers, handler)
-	})
+	for _, command := range commands {
+		Dispatcher.addHandlerForCommand(command, &Dispatcher.commandHandlers, handler)
+	}
 
 	if wildcard {
-		_ = append(Dispatcher.anythingHandlers, handler)
+		core.LogInfoF("Registered anything matcher: %s", toName(handler))
+		Dispatcher.anythingHandlers = append(Dispatcher.anythingHandlers, handler)
 	}
 }
 
@@ -49,7 +48,7 @@ func Dispatch(session *discordgo.Session, message *discordgo.Message) {
 // Parse and dispatch the message.
 func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, message *discordgo.Message) {
 	// Short-circuit if author of the message is the bot itself to avoid loops
-	if message.Author.ID == session.State.User.ID {
+	if message.Author == nil || message.Author.ID == session.State.User.ID {
 		return
 	}
 
@@ -61,7 +60,7 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 		return
 	}
 
-	// Split the command into parameters, and clean them up.
+	// Split the Command into parameters, and clean them up.
 	args := funk.FilterString(strings.Split(trimmed, " "), func(str string) bool {
 		return strings.Trim(str, "\t\r") != ""
 	})
@@ -75,45 +74,49 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 
 	command := strings.ToLower(args[0])
 	args = args[1:]
-
+	cmdMessage := &Message{message, session, command, args}
 	if commandHandlers := dispatcher.commandHandlers[command]; len(commandHandlers) > 0 {
-		core.LogDebugF("Found %d command handlers for %s.", len(commandHandlers), command)
-		funk.ForEach(commandHandlers, func(handler IMessageHandler) {
-			if handler.handleCommand(command, args, session, message) {
+		core.LogDebugF("Found %d Command handlers for %s.", len(commandHandlers), command)
+		for _, handler := range commandHandlers {
+			if handler.handleCommand(cmdMessage) {
 				core.LogDebug("   => handled.")
 				return
 			}
-		})
+		}
 	}
 
-	funk.ForEach(dispatcher.prefixHandlers, func(prefix string, handlers []IMessageHandler) {
-		if strings.HasPrefix(command, prefix) {
-			core.LogDebug("Found prefix handlers for", prefix)
-			funk.ForEach(handlers, func(handler IMessageHandler) {
-				if handler.handlePrefix(prefix, command, args, session, message) {
-					core.LogDebug("   => handled.")
-					return
-				}
-			})
+	for prefix, handlers := range dispatcher.prefixHandlers {
+		if !strings.HasPrefix(command, prefix) {
+			continue
 		}
-	})
-	//
-	//for handler in anythingHandlers {
-	//    LOG_DEBUG("Trying anything handler \(handler)...")
-	//    if handler.handleAnything(command, args: args, message: messageWrapper) {
-	//        LOG_DEBUG("    => handled")
-	//        return
-	//    }
-	//
-	//}
+		core.LogDebugF("Found %d prefix handlers for %s.", len(handlers), prefix)
+		for _, handler := range handlers {
+			if handler.handlePrefix(prefix, cmdMessage) {
+				if core.IsLogDebug() {
+					core.LogDebugF("   => handled by %s.", toName(handler))
+				}
+				return
+			}
+		}
+	}
+
+	for _, handler := range dispatcher.anythingHandlers {
+		if core.IsLogDebug() {
+			core.LogDebugF("Trying anything handler %s...", toName(handler))
+		}
+		if handler.handleAnything(cmdMessage) {
+			core.LogDebug("    => handled")
+			return
+		}
+	}
 }
 
-// Helper method to register a command for a handler.
-func (dispatcher *MessageDispatcher) addHandlerForCommand(command MessageCommand, dict *map[string][]IMessageHandler, handler IMessageHandler) {
+// Helper method to register a Command for a handler.
+func (dispatcher *MessageDispatcher) addHandlerForCommand(command MessageCommand, dict *map[string][]MessageHandler, handler MessageHandler) {
 	commandStr := strings.ToLower(command.Command)
 
 	// TODO: Help Strings
-	//if helpString := command.Help, let group = handler.commandGroup {
+	//if helpString := Command.Help, let group = handler.commandGroup {
 	//    if commandHelp[group] == nil {
 	//        commandHelp[group] = [commandStr: []]
 	//    } else if commandHelp[group]![commandStr] == nil {
@@ -124,6 +127,6 @@ func (dispatcher *MessageDispatcher) addHandlerForCommand(command MessageCommand
 
 	(*dict)[commandStr] = append((*dict)[commandStr], handler)
 	if core.IsLogInfo() {
-		core.LogInfoF("Registered command: %s for %s", commandStr, strings.TrimPrefix(fmt.Sprintf("%T", handler), "*"))
+		core.LogInfoF("Registered Command: %s for %s", commandStr, toName(handler))
 	}
 }

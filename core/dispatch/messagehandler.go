@@ -1,6 +1,11 @@
 package dispatch
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/bwmarrin/discordgo"
+)
 
 // MessageCommand is used when registering a handler.
 type MessageCommand struct {
@@ -8,31 +13,44 @@ type MessageCommand struct {
 	Help    string // Help string
 }
 
-type IMessageHandler interface {
-	// Process requests for command with this prefix.
-	handlePrefix(prefix string, command string, session []string, sess *discordgo.Session, message *discordgo.Message) bool
-	// Process command requests for the specific command.
-	handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool
-	// Wildcard handling for any command.
-	handleAnything(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool
+// Container for a message, session and parsed arguments.
+type Message struct {
+	*discordgo.Message
+	*discordgo.Session
+	Command string
+	Args    []string
+}
+
+// Utility method to send quick reply back to the channel
+func (m Message) ReplyToChannel(format string, v ...interface{}) {
+	m.ChannelMessageSend(m.ChannelID, fmt.Sprintf(format, v...))
+}
+
+// Interface used for message handlers
+type MessageHandler interface {
+	// Process requests for Command with this prefix.
+	handlePrefix(string, *Message) bool
+	// Process Command requests for the specific Command.
+	handleCommand(*Message) bool
+	// Wildcard handling for any Command.
+	handleAnything(*Message) bool
 }
 
 // Each message handler can process one or more commands / message responses
-type MessageHandler struct{}
+type NoOpMessageHandler struct{}
 
-func (*MessageHandler) handlePrefix(prefix string, command string, session []string, sess *discordgo.Session, message *discordgo.Message) bool {
+func (*NoOpMessageHandler) handlePrefix(string, *Message) bool {
 	return false
 }
 
-func (*MessageHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (*NoOpMessageHandler) handleCommand(*Message) bool {
 	return false
 }
 
-func (*MessageHandler) handleAnything(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (*NoOpMessageHandler) handleAnything(*Message) bool {
 	return false
 }
 
-func (handler *MessageHandler) prefixes() []MessageCommand { return nil }
-func (handler *MessageHandler) commands() []MessageCommand { return nil }
-func (handler *MessageHandler) commandGroup() string       { return "" }
-func (handler *MessageHandler) isWildCard() bool           { return false }
+func toName(handler MessageHandler) string {
+	return strings.TrimPrefix(fmt.Sprintf("%T", handler), "*")
+}

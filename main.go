@@ -7,10 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"GoBot/core"
+	"GoBot/core/dispatch"
+	_ "GoBot/core/dispatch/handlers" // Load the handlers to let them self-register
+
 	"github.com/bwmarrin/discordgo"
-	"github.com/neotron/GoBot/core"
-	"github.com/neotron/GoBot/core/dispatch"
-	_ "github.com/neotron/GoBot/core/handlers"
 )
 
 // Variables used for command line parameters
