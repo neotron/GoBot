@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"GoBot/core"
@@ -51,9 +52,31 @@ func Register(handler MessageHandler, commands, prefixes []MessageCommand, wildc
 	}
 }
 
-//
-func (d *MessageDispatcher) handleCommand(*Message) bool {
-	return false
+// This handle basically deals with help
+func (d *MessageDispatcher) handleCommand(m *Message) bool {
+	go func() {
+		groups := funk.Keys(d.commandHelp).([]string)
+		sort.Strings(groups)
+		for _, group := range groups {
+			var output []string
+			if group != "" {
+				output = append(output, fmt.Sprintf("**%s**", group))
+			} else {
+				output = append(output, "**General Commands**:")
+			}
+			commands := funk.Keys(d.commandHelp[group]).([]string)
+			sort.Strings(commands)
+			for _, command := range commands {
+				output = append(output, strings.Join(d.commandHelp[group][command], "\n"))
+			}
+			//if message.flags.contains(.Here) {
+			//        message.replyToChannel(output.joined(separator: "\n"));
+			//    } else {
+			<-m.ReplyToSender(strings.Join(output, "\n"))
+			//    }
+		}
+	}()
+	return true
 }
 
 func Dispatch(session *discordgo.Session, message *discordgo.Message) {

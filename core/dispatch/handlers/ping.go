@@ -19,6 +19,10 @@ func init() {
 		true)
 }
 
+func (*ping) CommandGroup() string {
+	return "Test Commands"
+}
+
 func (*ping) handleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case "ping":

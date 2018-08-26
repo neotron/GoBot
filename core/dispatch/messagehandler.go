@@ -32,14 +32,17 @@ func (m Message) ReplyToChannel(format string, v ...interface{}) {
 }
 
 // Utility method to send a reply to the author of the message
-func (m Message) ReplyToSender(format string, v ...interface{}) {
+func (m Message) ReplyToSender(format string, v ...interface{}) chan struct{} {
+	sendDone := make(chan struct{})
 	go func() {
 		ch, err := m.UserChannelCreate(m.Author.ID)
 		if err != nil {
 			core.LogError("Failed to open private channel: ", err)
 		}
 		m.ChannelMessageSend(ch.ID, fmt.Sprintf(format, v...))
+		sendDone <- struct{}{}
 	}()
+	return sendDone
 }
 
 // Interface used for message handlers
