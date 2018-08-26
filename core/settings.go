@@ -2,8 +2,9 @@ package core
 
 import (
 	"encoding/json"
-	"log"
 	"os"
+
+	"github.com/jcelliott/lumber"
 )
 
 type jsonData struct {
@@ -25,15 +26,20 @@ var Settings = SettingsStorage{jsonData{}}
 func LoadSettings(settingsfile string) {
 	file, err := os.Open(settingsfile)
 	if err != nil {
-		log.Fatalln("Failed to open config file", err)
+		LogFatal("Failed to open config file: ", err)
+
 	}
 	defer file.Close()
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&Settings.data)
 	if err != nil {
-		log.Fatalln("Failed to parse configuration: ", err)
+		LogFatal("Failed to parse configuration: ", err)
 	}
-	log.Println("found config: ", Settings)
+	if !Settings.IsDevelopment() {
+		SetLogLevel(lumber.INFO)
+	} else {
+		LogDebug("Loaded config successfully from ", settingsfile)
+	}
 }
 
 // Get the bot auth tooken

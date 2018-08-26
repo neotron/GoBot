@@ -5,12 +5,12 @@ import (
 	"github.com/neotron/GoBot/dispatch"
 )
 
-type PingHandler struct {
+type ping struct {
 	dispatch.MessageHandler
 }
 
 func init() {
-	dispatch.Register(&PingHandler{dispatch.MessageHandler{}},
+	dispatch.Register(&ping{dispatch.MessageHandler{}},
 		[]dispatch.MessageCommand{
 			{"ping", "Simple command to check that bot is alive"},
 			{"pong", "Simple command to check that bot is alive"},
@@ -19,7 +19,7 @@ func init() {
 		false)
 }
 
-func (*PingHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (*ping) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
 	processed := false
 	switch command {
 	case "ping":
@@ -32,7 +32,7 @@ func (*PingHandler) handleCommand(command string, args []string, session *discor
 	return processed
 }
 
-func (*PingHandler) handlePrefix(prefix string, command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
+func (*ping) handlePrefix(prefix string, command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {
 	processed := false
 	if prefix == "test" {
 		switch command {

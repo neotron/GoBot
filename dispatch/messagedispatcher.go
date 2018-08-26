@@ -2,7 +2,6 @@ package dispatch
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -48,12 +47,12 @@ func Dispatch(session *discordgo.Session, message *discordgo.Message) {
 
 // Parse and dispatch the message.
 func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, message *discordgo.Message) {
-	fmt.Println("Got message: ", message.Content)
-
 	// Short-circuit if author of the message is the bot itself to avoid loops
 	if message.Author.ID == session.State.User.ID {
 		return
 	}
+
+	core.LogDebug("Got message: ", message.Content)
 
 	// Ensure that the string has the prefix we're programmed to listen to
 	trimmed := strings.TrimPrefix(message.Content, core.Settings.CommandPrefix())
@@ -71,16 +70,16 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 		return
 	}
 
-	fmt.Println("Parsed parameters:", args)
+	core.LogDebug("Parsed parameters:", args)
 
 	command := strings.ToLower(args[0])
 	args = args[1:]
 
-	if commandHandlers := dispatcher.commandHandlers[command]; commandHandlers != nil {
-		log.Println("Found command handlers for", command)
+	if commandHandlers := dispatcher.commandHandlers[command]; len(commandHandlers) > 0 {
+		core.LogDebugF("Found %d command handlers for %s.", len(commandHandlers), command)
 		funk.ForEach(commandHandlers, func(handler IMessageHandler) {
 			if handler.handleCommand(command, args, session, message) {
-				log.Println("   => handled.")
+				core.LogDebug("   => handled.")
 				return
 			}
 		})
@@ -88,10 +87,10 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 
 	funk.ForEach(dispatcher.prefixHandlers, func(prefix string, handlers []IMessageHandler) {
 		if strings.HasPrefix(command, prefix) {
-			log.Println("Found prefix handlers for", prefix)
+			core.LogDebug("Found prefix handlers for", prefix)
 			funk.ForEach(handlers, func(handler IMessageHandler) {
 				if handler.handlePrefix(prefix, command, args, session, message) {
-					log.Println("   => handled.")
+					core.LogDebug("   => handled.")
 					return
 				}
 			})
@@ -122,11 +121,8 @@ func (dispatcher *MessageDispatcher) addHandlerForCommand(command MessageCommand
 	//    commandHelp[group]?[commandStr]?.append("\t**\(Config.commandPrefix)\(commandStr)**: \(helpString)")
 	//}
 
-	if (*dict)[commandStr] == nil {
-		(*dict)[commandStr] = []IMessageHandler{handler}
-	} else {
-		(*dict)[commandStr] = append((*dict)[commandStr], handler)
+	(*dict)[commandStr] = append((*dict)[commandStr], handler)
+	if core.IsLogInfo() {
+		core.LogInfoF("Registered command: %s for %s", commandStr, strings.TrimPrefix(fmt.Sprintf("%T", handler), "*"))
 	}
-
-	log.Printf("Registered command %s.", commandStr)
 }
