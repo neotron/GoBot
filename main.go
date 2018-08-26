@@ -8,12 +8,14 @@ import (
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/neotron/GoBot/core"
+	"github.com/neotron/GoBot/dispatch"
+	_ "github.com/neotron/GoBot/handlers"
 )
 
 // Variables used for command line parameters
 var (
 	settingsFile string
-	dispatcher   *MessageDispatcher
 )
 
 func init() {
@@ -23,9 +25,9 @@ func init() {
 }
 
 func main() {
-	settings := LoadSettings(settingsFile)
+	core.LoadSettings(settingsFile)
 	// Create a new Discord session using the provided bot token.
-	dg, err := discordgo.New("Bot " + settings.AuthToken())
+	dg, err := discordgo.New("Bot " + core.Settings.AuthToken())
 	if err != nil {
 		fmt.Println("error creating Discord session,", err)
 		return
@@ -44,9 +46,6 @@ func main() {
 
 	defer dg.Close()
 
-	// create message dispatcher
-	dispatcher = CreateDispatcher(settings)
-
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
@@ -57,9 +56,9 @@ func main() {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	dispatcher.Dispatch(s, m.Message)
+	dispatch.Dispatch(s, m.Message)
 }
 
 func messageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
-	dispatcher.Dispatch(s, m.Message)
+	dispatch.Dispatch(s, m.Message)
 }

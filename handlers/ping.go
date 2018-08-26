@@ -1,28 +1,22 @@
-package main
+package handlers
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"github.com/bwmarrin/discordgo"
+	"github.com/neotron/GoBot/dispatch"
+)
 
 type PingHandler struct {
-	MessageHandler
+	dispatch.MessageHandler
 }
 
-func RegisterPingHandler(dispatcher *MessageDispatcher) {
-	pingHandler := new(PingHandler)
-	pingHandler.MessageHandler = MessageHandler{}
-	dispatcher.Register(pingHandler)
-}
-
-func (*PingHandler) commands() []MessageCommand {
-	return []MessageCommand{
-		{"ping", "Simple command to check that bot is alive"},
-		{"pong", "Simple command to check that bot is alive"},
-	}
-}
-
-func (*PingHandler) prefixes() []MessageCommand {
-	return []MessageCommand{
-		{"test", "Simple test prefix command"},
-	}
+func init() {
+	dispatch.Register(&PingHandler{dispatch.MessageHandler{}},
+		[]dispatch.MessageCommand{
+			{"ping", "Simple command to check that bot is alive"},
+			{"pong", "Simple command to check that bot is alive"},
+		},
+		[]dispatch.MessageCommand{{"test", "Simple test prefix command"}},
+		false)
 }
 
 func (*PingHandler) handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool {

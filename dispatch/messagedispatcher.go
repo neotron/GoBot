@@ -1,4 +1,4 @@
-package main
+package dispatch
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/neotron/GoBot/core"
 	"github.com/thoas/go-funk"
 )
 
@@ -13,7 +14,6 @@ import (
 // It also filters out any response from messages sent by itself, and which don't have the proper
 // command prefix, as defined in the config file
 type MessageDispatcher struct {
-	settings *Settings
 	// allows prefix handling, i.e "randomcat" and "randomdog" could both go to a "random" prefix handler
 	prefixHandlers map[string][]IMessageHandler
 	// requires either just the command, i.e "route" or command with arguments "route 32 2.3"
@@ -22,15 +22,28 @@ type MessageDispatcher struct {
 	anythingHandlers []IMessageHandler
 }
 
-// Create a new dispatcher with the settings.
-func CreateDispatcher(settings *Settings) *MessageDispatcher {
-	dispatcher := new(MessageDispatcher)
-	dispatcher.settings = settings
-	dispatcher.prefixHandlers = map[string][]IMessageHandler{}
-	dispatcher.commandHandlers = map[string][]IMessageHandler{}
-	dispatcher.anythingHandlers = []IMessageHandler{}
-	dispatcher.registerDispatchers()
-	return dispatcher
+var Dispatcher = MessageDispatcher{
+	prefixHandlers:   map[string][]IMessageHandler{},
+	commandHandlers:  map[string][]IMessageHandler{},
+	anythingHandlers: []IMessageHandler{},
+}
+
+func Register(handler IMessageHandler, commands, prefixes []MessageCommand, wildcard bool) {
+	funk.ForEach(prefixes, func(prefix MessageCommand) {
+		Dispatcher.addHandlerForCommand(prefix, &Dispatcher.prefixHandlers, handler)
+	})
+
+	funk.ForEach(commands, func(cmd MessageCommand) {
+		Dispatcher.addHandlerForCommand(cmd, &Dispatcher.commandHandlers, handler)
+	})
+
+	if wildcard {
+		_ = append(Dispatcher.anythingHandlers, handler)
+	}
+}
+
+func Dispatch(session *discordgo.Session, message *discordgo.Message) {
+	Dispatcher.Dispatch(session, message)
 }
 
 // Parse and dispatch the message.
@@ -43,7 +56,7 @@ func (dispatcher *MessageDispatcher) Dispatch(session *discordgo.Session, messag
 	}
 
 	// Ensure that the string has the prefix we're programmed to listen to
-	trimmed := strings.TrimPrefix(message.Content, dispatcher.settings.CommandPrefix())
+	trimmed := strings.TrimPrefix(message.Content, core.Settings.CommandPrefix())
 	if trimmed == message.Content {
 		return
 	}
@@ -116,24 +129,4 @@ func (dispatcher *MessageDispatcher) addHandlerForCommand(command MessageCommand
 	}
 
 	log.Printf("Registered command %s.", commandStr)
-}
-
-// Register a message handler
-func (dispatcher *MessageDispatcher) Register(handler IMessageHandler) {
-	funk.ForEach(handler.prefixes(), func(prefix MessageCommand) {
-		dispatcher.addHandlerForCommand(prefix, &dispatcher.prefixHandlers, handler)
-	})
-
-	funk.ForEach(handler.commands(), func(cmd MessageCommand) {
-		dispatcher.addHandlerForCommand(cmd, &dispatcher.commandHandlers, handler)
-	})
-
-	if handler.isWildCard() {
-		_ = append(dispatcher.anythingHandlers, handler)
-	}
-}
-
-// Register up all message handlers
-func (dispatcher *MessageDispatcher) registerDispatchers() {
-	RegisterPingHandler(dispatcher)
 }

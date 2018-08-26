@@ -1,29 +1,19 @@
-package main
+package dispatch
 
 import "github.com/bwmarrin/discordgo"
 
+// MessageCommand is used when registering a handler.
 type MessageCommand struct {
-	Command string
-	Help    string
+	Command string // Command name or prefix
+	Help    string // Help string
 }
 
 type IMessageHandler interface {
-	// For registration
-
-	// Available command prefixes this handler can deal with.
-	// A prefix can be a partial world for example:
-	// randomcat and randomdog can be handled with a prefix random
-	prefixes() []MessageCommand
-	// Exact commands
-	commands() []MessageCommand
-	// Which command group this handler belongs to
-	commandGroup() string
-	// Whether or not this handler does parsing of any command
-	isWildCard() bool
-
-	// Acting on commands
+	// Process requests for command with this prefix.
 	handlePrefix(prefix string, command string, session []string, sess *discordgo.Session, message *discordgo.Message) bool
+	// Process command requests for the specific command.
 	handleCommand(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool
+	// Wildcard handling for any command.
 	handleAnything(command string, args []string, session *discordgo.Session, message *discordgo.Message) bool
 }
 
