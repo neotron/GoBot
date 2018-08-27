@@ -2,12 +2,13 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"GoBot/core"
+	"GoBot/core/database"
+	_ "GoBot/core/database" // Initialize database
 	"GoBot/core/dispatch"
 	_ "GoBot/core/dispatch/handlers" // Load the handlers to let them self-register
 
@@ -27,10 +28,13 @@ func init() {
 
 func main() {
 	core.LoadSettings(settingsFile)
+	database.InitalizeDatabase()
+	defer database.Close()
+
 	// Create a new Discord session using the provided bot token.
 	dg, err := discordgo.New("Bot " + core.Settings.AuthToken())
 	if err != nil {
-		fmt.Println("error creating Discord session,", err)
+		core.LogFatal("error creating Discord session,", err)
 		return
 	}
 
@@ -41,14 +45,14 @@ func main() {
 	// Open a websocket connection to Discord and begin listening.
 	err = dg.Open()
 	if err != nil {
-		fmt.Println("error opening connection,", err)
+		core.LogFatal("error opening connection,", err)
 		return
 	}
 
 	defer dg.Close()
 
 	// Wait here until CTRL-C or other term signal is received.
-	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
+	core.LogInfoF("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc

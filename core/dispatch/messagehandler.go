@@ -8,6 +8,19 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+type Flags int
+
+const (
+	None    Flags = 0
+	Verbose Flags = 1 << iota
+	Help
+	Here
+)
+
+func (flags Flags) IsSet(check Flags) bool {
+	return (flags & check) == check
+}
+
 // MessageCommand is used when registering a handler.
 type MessageCommand struct {
 	Command string // Command name or prefix
@@ -20,6 +33,8 @@ type Message struct {
 	*discordgo.Session
 	Command string
 	Args    []string
+	Flags   Flags
+	IsPM    bool
 }
 
 type Test interface {

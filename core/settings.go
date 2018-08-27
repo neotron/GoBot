@@ -11,7 +11,7 @@ type jsonData struct {
 	Development       bool
 	AuthToken         string
 	CommandPrefix     string
-	DatabaseDirectory string
+	Database          string
 	ResourceDirectory string
 	OwnerIds          []string
 }
@@ -40,6 +40,7 @@ func LoadSettings(settingsfile string) {
 	} else {
 		LogDebug("Loaded config successfully from ", settingsfile)
 	}
+
 }
 
 // Get the bot auth tooken
@@ -52,7 +53,12 @@ func (s *SettingsStorage) CommandPrefix() string {
 	return s.data.CommandPrefix
 }
 
-// Get wXShether or not we're running in Development mode.
+// Get whether or not we're running in Development mode.
 func (s *SettingsStorage) IsDevelopment() bool {
 	return s.data.Development
+}
+
+// Directory database is stored in
+func (s *SettingsStorage) Database() string {
+	return s.data.Database
 }

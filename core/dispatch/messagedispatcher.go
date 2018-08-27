@@ -120,7 +120,7 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 
 	command := strings.ToLower(args[0])
 	args = args[1:]
-	cmdMessage := &Message{message, session, command, args}
+	cmdMessage := &Message{message, session, command, args, parseCommandFlags(args), isDirectAddressed}
 	if commandHandlers := d.commandHandlers[command]; len(commandHandlers) > 0 {
 		core.LogDebugF("Found %d Command handlers for %s.", len(commandHandlers), command)
 		for _, handler := range commandHandlers {
@@ -190,4 +190,19 @@ func comesFromDM(s *discordgo.Session, m *discordgo.Message) (bool, error) {
 	}
 
 	return channel.Type == discordgo.ChannelTypeDM, nil
+}
+
+func parseCommandFlags(args []string) Flags {
+	flags := None
+
+	if funk.Contains(args, "-v") || funk.Contains(args, "--verbose") || funk.Contains(args, "verbose") {
+		flags |= Verbose
+	}
+	if funk.Contains(args, "-h") || funk.Contains(args, "help") {
+		flags |= Help
+	}
+	if funk.Contains(args, "here") || funk.Contains(args, "--here") {
+		flags |= Here
+	}
+	return flags
 }
