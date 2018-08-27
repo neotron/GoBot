@@ -3,12 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
-	"net/url"
+	"strconv"
 	"strings"
 
 	"GoBot/core"
 	"GoBot/core/dispatch"
+	"github.com/thoas/go-funk"
 )
 
 //
@@ -30,12 +32,12 @@ type CommanderPositionModel struct {
 	Date          string
 }
 type CoordModel struct {
-	x, y, z int64
+	X, Y, Z float64
 }
 
 type SystemModel struct {
-	name   string
-	coords CoordModel
+	Name   string
+	Coords *CoordModel
 }
 
 func init() {
@@ -51,41 +53,44 @@ func (s *edsm) handleCommand(m *dispatch.Message) bool {
 	case "loc":
 		go handleLocationLookup(strings.Join(m.Args, " "), m)
 	case "dist":
-		/*		var systems = args.joined(separator: " ").components(separatedBy: "->").map {
-			$0.trimmingCharacters(in: CharacterSet.whitespaces)
+		systems := funk.Map(strings.Split(strings.Join(m.Args, " "), "->"), func(arg string) string {
+			return strings.Trim(arg, " \t\n")
+		}).([]string)
+		if len(systems) == 1 {
+			systems = append(systems, "Sol")
 		}
-			if (systems.count == 1) {
-				systems.append("Sol")
-			}
-			handleDistance(systems, message: message)*/
-		break
+		handleDistance(systems, m)
 	default:
 		return false
 	}
 	return true
 }
 
-func handleLocationLookup(commander string, m *dispatch.Message) {
-	u, err := url.Parse("https://www.edsm.net/api-logs-v1/get-position/")
-	q := u.Query()
-	q.Add("commanderName", commander)
-	u.RawQuery = q.Encode()
+func fetchCommanderLocation(commander string, m *dispatch.Message) *CommanderPositionModel {
+	u, err := core.MakeURL("https://www.edsm.net/api-logs-v1/get-position/", []core.URLParams{
+		{"commanderName", commander},
+	})
 	res, err := http.Get(u.String())
 	if err != nil {
 		core.LogError("Failed to query ESDM for commander location: ", err)
 		m.ReplyToChannel("Failed to complete request.")
-		return
+		return nil
 	}
 
 	defer res.Body.Close()
-	var c CommanderPositionModel
 	decoder := json.NewDecoder(res.Body)
-	err = decoder.Decode(&c)
+	var cmdr *CommanderPositionModel
+	err = decoder.Decode(&cmdr)
 	if err != nil {
 		core.LogError("Failed to decode ESDM query response: ", err)
 		m.ReplyToChannel("Failed to parse ESDM query response.")
-		return
+		return nil
 	}
+	return cmdr
+}
+func handleLocationLookup(commander string, m *dispatch.Message) {
+
+	c := fetchCommanderLocation(commander, m)
 
 	if len(c.System) > 0 {
 		var output = fmt.Sprint(commander, " was last seen in ", c.System)
@@ -106,174 +111,147 @@ func handleLocationLookup(commander string, m *dispatch.Message) {
 }
 
 func (*edsm) CommandGroup() string {
-	return "Elite: Dangerous"
+	return "EDSM Queries"
 }
 
-/*
+func handleDistance(s []string, m *dispatch.Message) {
+	var aliases = map[string]string{
+		"jaques":         "Colonia",
+		"jaques station": "Colonia",
+	}
+	if len(s) != 2 {
+		m.ReplyToChannel("Invalid syntax. Expected: '%sdist System Name -> System 2 Name`", core.Settings.CommandPrefix())
+		return
+	}
+	var systemCoords []SystemModel
+	calcDist := func(model SystemModel) {
+		systemCoords = append(systemCoords, model)
+		if len(systemCoords) == 2 {
+			calculateDistance(systemCoords, m)
+		}
+	}
+	for _, systemName := range s {
+		var waypointName string
+		if alias := aliases[strings.ToLower(systemName)]; len(alias) > 0 {
+			waypointName = fmt.Sprintf("%s `(aka %s)`", systemName, alias)
+			systemName = alias
+		}
+		parts := strings.Split(systemName, " ")
 
-class EDSMMessageHandler: MessageHandler {
-    fileprivate let aliases = [
-            "jaques": "Eol Prou RS-T D3-94",
-            "jaques station": "Eol Prou RS-T D3-94",
-    ]
+		// Parsed raw coordinates
+		switch len(parts) {
+		case 3:
+			x, errX := strconv.ParseFloat(parts[0], 64)
+			y, errY := strconv.ParseFloat(parts[1], 64)
+			z, errZ := strconv.ParseFloat(parts[2], 64)
+			if errX == nil && errY == nil && errZ == nil {
+				sys := SystemModel{
+					fmt.Sprintf("`(x: %.1f, y: %.1f, z: %.1f)`", x, y, z),
+					&CoordModel{x, y, z},
+				}
+				calcDist(sys)
+				continue
+			}
+		case 1:
 
-    override var commands: [MessageCommand]? {
-        return [("loc", "Try to get a commanders location from EDSM. Syntax: loc <commander name>"),
-                ("dist", "Calculate distance between two systems. Syntax: dist <system> -> <system> (i.e: `dist Sol -> Sagittarius A*`)")
-        ]
-    }
-    override var commandGroup: String? {
-        return "EDSM Api Queries"
-    }
-    override func handleCommand(_ command: String, args: [String], message: Message) -> Bool {
-        switch (command) {
-        case "loc":
-            handleLocationLookup(args.joined(separator: " "), message: message)
-        case "dist":
-            var systems = args.joined(separator: " ").components(separatedBy: "->").map {
-                $0.trimmingCharacters(in: CharacterSet.whitespaces)
-            }
-            if (systems.count == 1) {
-                systems.append("Sol")
-            }
-           handleDistance(systems, message: message)
-        default:
-            return false
-        }
-        return true
-    }
+			// TODO: Waypoint handling
+			_, err := strconv.ParseInt(parts[0], 10, 8)
+			if err == nil {
+				//	wps := DistantWorldsWaypoints.database?.waypoints else {
+				m.ReplyToChannel("Failed to load waypoint database, sorry.")
+				//		return
+			}
+			/*	if wp < 0 || wp >= wps.count {
+					m.ReplyToChannel("Waypoint \(wp) is not valid.")
+					return
+				}
+				if wps[wp].system == "TBA" {
+					m.ReplyToChannel("Waypoint \(wp)'s system is not known yet.")
+					return
+				}
+				systemName = wps[wp].system
+				waypointName = "Waypoint \(wp) (\(systemName))"
+			*/
+			//			}
+		}
 
-    fileprivate func handleDistance( _ systems: [String], message: Message) {
-        if systems.count != 2 {
-            message.replyToChannel("Invalid syntax. Expected: `\(Config.commandPrefix)dist System Name -> System 2 Name`")
-            return
-        }
-        var systemCoords = [SystemModel]()
-        let calcDist = {
-            (model: SystemModel) in
-            systemCoords.append(model)
-            if (systemCoords.count == 2) {
-                self.calculateDistance(systemCoords, message: message)
-            }
-        }
-        for var systemName in systems {
-            var waypointName: String?
-            if let alias = self.aliases[systemName.lowercased()] {
-                waypointName = "\(systemName) (\(alias))"
-                systemName = alias
-            }
-            let parts = systemName.components(separatedBy: " ")
-            if (parts.count == 3) {
-                if let x = Double(parts[0]), let y = Double(parts[1]), let z = Double(parts[2]) {
-                    let system = SystemModel()
-                    let coords = CoordModel()
-                    coords.x = x
-                    coords.y = y
-                    coords.z = z
-                    system.name = "(x: \(x), y: \(y), z: \(z))"
-                    system.coords = coords
-                    calcDist(system)
-                    continue
-                }
-            }
-            if (parts.count == 1) {
-                if let wp = Int(parts[0]) {
-                    guard let wps = DistantWorldsWaypoints.database?.waypoints else {
-                        message.replyToChannel("Failed to load waypoint database, sorry.")
-                        return
-                    }
-                    if wp < 0 || wp >= wps.count {
-                        message.replyToChannel("Waypoint \(wp) is not valid.")
-                        return
-                    }
-                    if wps[wp].system == "TBA" {
-                        message.replyToChannel("Waypoint \(wp)'s system is not known yet.")
-                        return
-                    }
-                    systemName = wps[wp].system
-                    waypointName = "Waypoint \(wp) (\(systemName))"
+		// Look up system coordinates by name
+		system := getSystemCoords(systemName, m)
+		if system != nil {
+			if len(waypointName) > 0 {
+				system.Name = waypointName
+			}
+			calcDist(*system)
+			continue
+		}
 
-                }
-            }
+		// Check if the "system" is a commander
+		location := fetchCommanderLocation(systemName, m)
 
-            getSystemCoords(systemName, message: message) {
-                (system: SystemModel?) in
-                if system != nil {
-                    if let name = waypointName {
-                        system!.name = name
-                    }
-                    calcDist(system!)
-                    return
-                }
-
-                Alamofire.request("https://www.edsm.net/api-logs-v1/get-position/", parameters: ["commanderName": systemName]).responseObject {
-                    (response: DataResponse<CommanderPositionModel>) in
-                    guard let location = response.result.value else {
-                        message.replyToChannel("Failed to complete request.")
-                        LOG_ERROR("Get Position api failed with error \(response.result.error)")
-                        return
-                    }
-
-                    if let system = location.system {
-                        self.getSystemCoords(system, message: message) {
-                            (model: SystemModel?) in
-                            if let system = model {
-                                system.name = "\(systemName) (\(system.name))"
-                                calcDist(system)
-                                return
-                            } else {
-                                self.reportNotTrilaterated(systemName, message: message)
-                            }
-                        }
-                    } else {
-                        self.reportNotTrilaterated(systemName, message: message)
-                    }
-                }
-            }
-        }
-    }
-
-    fileprivate func getSystemCoords(_ systemName: String, message: Message, callback: @escaping (SystemModel?) -> Void) {
-        Alamofire.request("https://www.edsm.net/api-v1/system",
-                          parameters: ["systemName": systemName,
-                                       "coords": "1"]).responseObject {
-            (response: DataResponse<SystemModel>) in
-            if let system = response.result.value {
-                guard let _ = system.coords else {
-                    if system.name != "" {
-                        self.reportNotTrilaterated(systemName, message: message)
-                    } else {
-                        callback(nil)
-                    }
-                    return
-                }
-                callback(system)
-            } else {
-                callback(nil)
-            }
-        }
-    }
-
-    fileprivate func reportNotTrilaterated(_ systemName: String, message: Message) {
-        message.replyToChannel("\(systemName) has not been trilaterated.")
-    }
-
-    fileprivate func calculateDistance(_ systems: [SystemModel], message: Message) {
-        guard let c1 = systems[0].coords, let c2 = systems[1].coords else {
-            message.replyToChannel("Couldn't get coordinates for both systems.")
-            return
-        }
-
-        let sq2 = {
-            (a: Double, b: Double) -> Double in
-            let val = a - b
-            return val * val
-        }
-        let dist = sqrt(sq2(c1.x, c2.x) + sq2(c1.y, c2.y) + sq2(c1.z, c2.z));
-        message.replyToChannel(String(format: "Distance between \(systems[0].name) and \(systems[1].name) is %.2f ly", dist))
-
-    }
-
-
+		if location != nil && len(location.System) > 0 {
+			sys := getSystemCoords(location.System, m)
+			if sys != nil {
+				sys.Name = fmt.Sprintf("Cmdr %s `(in %s)`", systemName, sys.Name)
+				calcDist(*sys)
+			} else {
+				reportNotTrilaterated(systemName, m)
+			}
+		} else {
+			reportNotTrilaterated(systemName, m)
+		}
+	}
 }
-*/
+
+func getSystemCoords(systemName string, m *dispatch.Message) *SystemModel {
+	u, err := core.MakeURL("https://www.edsm.net/api-v1/system", []core.URLParams{
+		{"systemName", systemName},
+		{"coords", "1"},
+	})
+
+	if err != nil {
+		m.ReplyToChannel("Failed to form EDSM request.")
+		core.LogError("Failed to make URL: ", err)
+		return nil
+	}
+
+	res, err := http.Get(u.String())
+	if err != nil {
+		m.ReplyToChannel("Failed to complete request.")
+		core.LogError("Get Position api failed with error: ", err)
+		return nil
+	}
+	defer res.Body.Close()
+	var system SystemModel
+	decoder := json.NewDecoder(res.Body)
+	err = decoder.Decode(&system)
+
+	if err != nil || len(system.Name) == 0 {
+		return nil
+	}
+	if system.Coords == nil {
+		reportNotTrilaterated(systemName, m)
+		return nil
+	}
+	return &system
+}
+
+func reportNotTrilaterated(systemName string, m *dispatch.Message) {
+	m.ReplyToChannel("%s has not been trilaterated.", systemName)
+}
+
+func calculateDistance(s []SystemModel, m *dispatch.Message) {
+	c1 := s[0].Coords
+	c2 := s[1].Coords
+	if c1 == nil || c2 == nil {
+		m.ReplyToChannel("Couldn't get coordinates for both systems.")
+		return
+	}
+
+	sq2 := func(a, b float64) float64 {
+		val := a - b
+		return math.Pow(val, 2)
+	}
+
+	dist := math.Sqrt(sq2(c1.X, c2.X) + sq2(c1.Y, c2.Y) + sq2(c1.Z, c2.Z))
+	m.ReplyToChannel("Distance between %s and %s is %.2f ly", s[0].Name, s[1].Name, dist)
+}
