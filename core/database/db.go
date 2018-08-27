@@ -1,6 +1,8 @@
 package database
 
 import (
+	"database/sql"
+	"errors"
 	"log"
 	"sync"
 
@@ -44,6 +46,9 @@ type UserRole struct {
 	Role   int
 	UserId int `db:"user_id"`
 }
+type count struct {
+	Count int
+}
 
 var database *sqlx.DB
 var mu sync.RWMutex
@@ -77,8 +82,75 @@ func FetchCommandAlias(cmd string) *CommandAlias {
 		core.LogErrorF("Failed to fetch command %s: %s", cmd, err)
 		return nil
 	}
-	core.LogDebugF("Loaded command: %#v", command)
 	return &command
+}
+
+func HasCommandAlias(cmd string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if database == nil {
+		core.LogError("Database isn't open. Shouldn't happen.")
+		return false
+	}
+	count := count{}
+	err := database.Get(&count, "SELECT count(*) count FROM commandalias WHERE command=$1", cmd)
+	if err != nil {
+		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
+		return false
+	}
+	return count.Count > 0
+}
+
+func ExecuteAndCommit(action func(tx *sql.Tx) (sql.Result, error)) (res sql.Result, err error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if database == nil {
+		err = errors.New("database not open")
+		return
+	}
+	tx, err := database.Begin()
+	if err != nil {
+		return
+	}
+	res, err = action(tx)
+
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+	err = tx.Commit()
+	if err != nil {
+		tx.Rollback()
+	}
+	return
+}
+
+func CreateCommandAlias(cmd, val string) bool {
+	_, err := ExecuteAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec("INSERT INTO commandalias (command, value, pmenabled) VALUES ($1, $2, FALSE)", cmd, val)
+	})
+	if err != nil {
+		core.LogError("Failed to insert command: ", err)
+		return false
+	}
+	return true
+}
+
+func HasCommandGroup(cmd string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if database == nil {
+		core.LogError("Database isn't open. Shouldn't happen.")
+		return false
+	}
+	count := count{}
+	err := database.Get(&count, "SELECT count(*) count FROM commandgroup WHERE command=$1", cmd)
+	if err != nil {
+		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
+		return false
+	}
+	return count.Count > 0
 }
 
 func FetchCommandGroup(cmd string) *CommandGroup {
@@ -94,7 +166,6 @@ func FetchCommandGroup(cmd string) *CommandGroup {
 		core.LogErrorF("Failed to fetch command group %s: %s", cmd, err)
 		return nil
 	}
-	core.LogDebugF("Loaded command group: %#v", command)
 	return &command
 }
 
@@ -108,7 +179,6 @@ func FetchCommandGroups() []CommandGroup {
 		core.LogErrorF("Failed to fetch command groups: %s", err)
 		return nil
 	}
-	core.LogDebugF("Loaded command groups: %#v", groups)
 	return groups
 }
 
@@ -122,7 +192,6 @@ func (c *CommandGroup) FetchCommands() []CommandAlias {
 		core.LogErrorF("Failed to fetch commands for command group %s: %s", c.Command, err)
 		return nil
 	}
-	core.LogDebugF("Loaded command group [%s] commands: %#v", c.Command, commands)
 	return commands
 }
 
@@ -136,6 +205,5 @@ func FetchStandaloneCommands() []CommandAlias {
 		core.LogErrorF("Failed to fetch standalone commands: %s", err)
 		return nil
 	}
-	core.LogDebugF("Loaded commands: %#v", commands)
 	return commands
 }

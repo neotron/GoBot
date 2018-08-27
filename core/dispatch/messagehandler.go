@@ -31,10 +31,10 @@ type MessageCommand struct {
 type Message struct {
 	*discordgo.Message
 	*discordgo.Session
-	Command string
-	Args    []string
-	Flags   Flags
-	IsPM    bool
+	Command       string
+	Args, RawArgs []string
+	Flags         Flags
+	IsPM          bool
 }
 
 type Test interface {

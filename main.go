@@ -61,9 +61,9 @@ func main() {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	dispatch.Dispatch(s, m.Message)
+	go dispatch.Dispatch(s, m.Message)
 }
 
 func messageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
-	dispatch.Dispatch(s, m.Message)
+	go dispatch.Dispatch(s, m.Message)
 }

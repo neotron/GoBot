@@ -52,6 +52,10 @@ func Register(handler MessageHandler, commands, prefixes []MessageCommand, wildc
 	}
 }
 
+func (d *MessageDispatcher) HasCommand(cmd string) bool {
+	return d.commandHandlers[cmd] != nil || d.prefixHandlers[cmd] != nil
+}
+
 // This handle basically deals with help
 func (d *MessageDispatcher) handleCommand(m *Message) bool {
 	go func() {
@@ -107,7 +111,8 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 	}
 
 	// Split the Command into parameters, and clean them up.
-	args := funk.FilterString(strings.Split(trimmed, " "), func(str string) bool {
+	rawArgs := strings.Split(trimmed, " ")
+	args := funk.FilterString(rawArgs, func(str string) bool {
 		return strings.Trim(str, "\t\r") != ""
 	})
 
@@ -120,7 +125,10 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 
 	command := strings.ToLower(args[0])
 	args = args[1:]
-	cmdMessage := &Message{message, session, command, args, parseCommandFlags(args), isDirectAddressed}
+	cmdMessage := &Message{
+		message, session, command, args,
+		rawArgs[1:], parseCommandFlags(args), isDirectAddressed,
+	}
 	if commandHandlers := d.commandHandlers[command]; len(commandHandlers) > 0 {
 		core.LogDebugF("Found %d Command handlers for %s.", len(commandHandlers), command)
 		for _, handler := range commandHandlers {

@@ -53,7 +53,7 @@ func init() {
 func (s *edsm) handleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case "loc":
-		go handleLocationLookup(strings.Join(m.Args, " "), m)
+		handleLocationLookup(strings.Join(m.Args, " "), m)
 	case "dist":
 		systems := funk.Map(strings.Split(strings.Join(m.Args, " "), "->"), func(arg string) string {
 			return strings.Trim(arg, " \t\n")
@@ -90,6 +90,7 @@ func fetchCommanderLocation(commander string, m *dispatch.Message) *CommanderPos
 	}
 	return cmdr
 }
+
 func handleLocationLookup(commander string, m *dispatch.Message) {
 
 	c := fetchCommanderLocation(commander, m)

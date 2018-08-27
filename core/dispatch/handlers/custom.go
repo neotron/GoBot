@@ -23,7 +23,6 @@ const (
 	RemoveFromCategory = "rmfromcat"
 	DeleteCategory     = "delcat"
 	ListCommands       = "listcmds"
-	Crash              = "crash"
 )
 
 func (*custom) CommandGroup() string {
@@ -41,7 +40,6 @@ func init() {
 			{RemoveFromCategory, "Remove a command from a category. Arguments: *<category> <command>*"},
 			{DeleteCategory, "Delete an existing category. Commands in the category will not be removed. Arguments: *<category>*"},
 			{ListCommands, "List existing custom commands and categories."},
-			{Crash, ""},
 		},
 		nil, true)
 }
@@ -53,7 +51,7 @@ func (*custom) handlePrefix(string, *dispatch.Message) bool {
 func (*custom) handleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case AddCommand:
-		break
+		addCommand(m)
 	case RemoveCommand:
 		break
 	case EditCommand:
@@ -67,12 +65,53 @@ func (*custom) handleCommand(m *dispatch.Message) bool {
 	case DeleteCategory:
 		break
 	case ListCommands:
-		go listCommands(m)
-	case Crash:
-		break
+		listCommands(m)
+	default:
+		return false
 	}
-	return false
+	return true
 }
+
+func getCommandText(m *dispatch.Message) *string {
+	if m.RawArgs == nil {
+		m.ReplyToChannel("Missing command alias text.")
+		return nil
+	}
+	text := strings.Join(m.RawArgs[1:], " ")
+	return &text
+}
+
+func addCommand(m *dispatch.Message) {
+	if len(m.Args) < 2 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command> <new text>")
+		return
+	}
+	cmd := m.Args[0]
+	if dispatch.Dispatcher.HasCommand(cmd) {
+		m.ReplyToChannel("**Error:** Command **%s** is a predefined command. Pick another name.", cmd)
+		return
+	}
+	if database.HasCommandAlias(cmd) {
+		m.ReplyToChannel("**Error:** Command **%s** already exists. Use `%s%s` instead.", cmd,
+			core.Settings.CommandPrefix(), EditCommand)
+		return
+	}
+	if database.HasCommandGroup(cmd) {
+		m.ReplyToChannel("**Error:** Cannot add command **%s** since there's already a category with that name.", cmd)
+		return
+	}
+
+	if commandText := getCommandText(m); commandText != nil {
+		ok := database.CreateCommandAlias(cmd, *commandText)
+		if ok {
+			m.ReplyToChannel("Command alias for **%s** created successfully.", cmd)
+			return
+		}
+	}
+	core.LogDebug("Command was not created.")
+	m.ReplyToChannel("Internal error. Unable to create command alias.")
+}
+
 func listCommands(m *dispatch.Message) {
 	var output []string
 	prefix := core.Settings.CommandPrefix()
