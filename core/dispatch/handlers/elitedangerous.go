@@ -17,20 +17,21 @@ import (
 	"GoBot/core/dispatch"
 )
 
-type science struct {
+type elitedangerous struct {
 	dispatch.NoOpMessageHandler
 }
 
 func init() {
-	dispatch.Register(&science{},
+	dispatch.Register(&elitedangerous{},
 		[]dispatch.MessageCommand{
 			{"bearing", "Calculate bearing and optional distance between two planetary coordiantes. Args: <lat1> <lon1> <lat2> <lon2> [planet radius in km]"},
 			{"g", "Calculate gravity for a planet. Arguments: <Earth masses> <radius in km>"},
 			{"kly/hr", "Calculate max kly travelled per hour. Arguments: <jump range> [optional: time per jump in seconds (default 45s)] [optional: effiency (default 95)]"},
+			{"route", "Calculate optimal core routing distance. No longer needed, but fun for legacy reasons. Arguments: <jump range> <kly to Sgr A*> [optional: max route length in ly]"},
 		}, nil, false)
 }
 
-func (s *science) handleCommand(m *dispatch.Message) bool {
+func (s *elitedangerous) handleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case "g":
 		handleGravity(m)
@@ -38,13 +39,15 @@ func (s *science) handleCommand(m *dispatch.Message) bool {
 		handleKlyPerHour(m)
 	case "bearing":
 		handleBearingAndDistance(m)
+	case "route":
+		go handleRoute(m)
 	default:
 		return false
 	}
 	return true
 }
 
-func (*science) CommandGroup() string {
+func (*elitedangerous) CommandGroup() string {
 	return "Elite: Dangerous"
 }
 
@@ -138,6 +141,57 @@ var densitySigmaArray = []densitySigma{
 	{"WW", 1.51E+3, 4.24E+3, 6.97E+3, 9.70E+3},
 	{"ELW", 4.87E+3, 5.65E+3, 6.43E+3, 7.21E+3},
 	{"AW", 4.23E+2, 3.50E+3, 6.59E+3, 9.67E+3},
+}
+
+func handleRoute(m *dispatch.Message) {
+	const MaxDistance = 20000.0
+	var maxDistance = MaxDistance
+	if len(m.Args) < 2 {
+		m.ReplyToChannel("Missing arguments. Expected: <JumpRange> <SgrA* distance in kly> [optional max plot in ly]")
+		return
+	}
+
+	jumpRange, errJump := strconv.ParseFloat(m.Args[0], 64)
+	distance, errDist := strconv.ParseFloat(m.Args[0], 64)
+	if errJump != nil || errDist != nil {
+		m.ReplyToChannel("Jump range and distance parameters should be numbers. Expected: <JumpRange> <SgrA* distance in kly> [optional max plot in ly]")
+		return
+	}
+
+	if len(m.Args) > 2 {
+		optMaxDistance, err := strconv.ParseFloat(m.Args[2], 64)
+		if err == nil {
+			maxDistance = math.Min(optMaxDistance, maxDistance) // Only reduce it since 1000 ly is maximum routable
+		}
+	}
+
+	if distance >= 100 {
+		distance /= 1000.0 // Assume accidental entry in ly instead of kly.
+	}
+	calc := func() float64 {
+		N := math.Floor(maxDistance / jumpRange)
+		M := N * jumpRange
+		return M - ((N / 4) + (distance * 2))
+	}
+	var estRange = calc()
+	if estRange <= 0 {
+		m.ReplyToChannel("Error: Calculation resulted in a negative distance. Please check your input.")
+		return
+	}
+	if maxDistance < MaxDistance {
+		maxRange := maxDistance
+		for {
+			maxDistance += jumpRange
+			improvement := calc()
+			if improvement > maxRange {
+				break // too far
+			}
+			estRange = improvement
+		}
+	}
+	marginOfError := estRange * 0.0055
+	m.ReplyToChannel("Estimated plot range should be around **%.0f ly** - check range *%.0f to %.0f ly*",
+		estRange, math.Floor(estRange-marginOfError), math.Ceil(estRange+marginOfError))
 }
 
 func handleGravity(m *dispatch.Message) {

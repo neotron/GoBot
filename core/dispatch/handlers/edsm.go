@@ -44,7 +44,9 @@ func init() {
 	dispatch.Register(&edsm{},
 		[]dispatch.MessageCommand{
 			{"loc", "Try to get a commanders location from EDSM. Syntax: loc <commander name>"},
-			{"dist", "Calculate distance between two systems. Syntax: dist <system> -> <system> (i.e: `dist Sol -> Sagittarius A*`)"},
+			{"dist", fmt.Sprint("Calculate distance between two systems. Syntax: dist <system> -> <system> ",
+				"(i.e: `dist Sol -> Sagittarius A*`). Instead of a system, you can also use a commander name or ",
+				"a location consisting of three X Y Z coordinates, for example: `dist NeoTron -> 0 0 0`.")},
 		}, nil, false)
 }
 
