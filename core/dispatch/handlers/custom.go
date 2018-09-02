@@ -48,15 +48,18 @@ func (*custom) handlePrefix(string, *dispatch.Message) bool {
 	return false
 }
 
-func (*custom) handleCommand(m *dispatch.Message) bool {
+func (c *custom) handleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case AddCommand:
 		addCommand(m)
 	case RemoveCommand:
+		removeCommand(m)
 		break
 	case EditCommand:
+		editCommand(m)
 		break
 	case SetHelpText:
+		setHelpText(m)
 		break
 	case AddToCategory:
 		break
@@ -104,12 +107,85 @@ func addCommand(m *dispatch.Message) {
 	if commandText := getCommandText(m); commandText != nil {
 		ok := database.CreateCommandAlias(cmd, *commandText)
 		if ok {
+			core.LogInfoF("%s added command alias %s.", m.Author.Username, cmd)
 			m.ReplyToChannel("Command alias for **%s** created successfully.", cmd)
 			return
 		}
 	}
 	core.LogDebug("Command was not created.")
 	m.ReplyToChannel("Internal error. Unable to create command alias.")
+}
+
+func setHelpText(m *dispatch.Message) {
+	var cmd string
+	var helpText *string
+
+	switch len(m.Args) {
+	case 0:
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command> [optional new help text]")
+	default:
+		helpText = getCommandText(m)
+		fallthrough
+	case 1:
+		cmd = m.Args[0]
+	}
+	if database.HasCommandAlias(cmd) {
+		if database.UpdateCommandAlias(cmd, database.HelpField, helpText) {
+			core.LogInfoF("%s updated help text for command %s.", m.Author.Username, cmd)
+			m.ReplyToChannel("Help text for command %s was updated.", cmd)
+		} else {
+			core.LogDebug("Command was not updated.")
+			m.ReplyToChannel("Internal error. Unable to update command alias.")
+		}
+	} else if database.HasCommandGroup(cmd) {
+		if database.UpdateCommandGroup(cmd, database.HelpField, helpText) {
+			core.LogInfoF("%s updated help text for command group %s.", m.Author.Username, cmd)
+			m.ReplyToChannel("Help text for command group %s was updated.", cmd)
+		} else {
+			core.LogDebug("Command group was not updated.")
+			m.ReplyToChannel("Internal error. Unable to update command group.")
+		}
+	} else {
+		m.ReplyToChannel("**Error:** No command or command group **%s** found.", cmd)
+	}
+}
+
+func editCommand(m *dispatch.Message) {
+	if len(m.Args) < 2 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command> <new text>")
+		return
+	}
+	cmd := m.Args[0]
+	if !database.HasCommandAlias(cmd) {
+		m.ReplyToChannel("**Error:** Command **%s** doesn't exist. Use `%s%s` instead.", cmd,
+			core.Settings.CommandPrefix(), AddCommand)
+		return
+	}
+	if commandText := getCommandText(m); commandText != nil {
+		ok := database.UpdateCommandAlias(cmd, database.ValueField, commandText)
+		if ok {
+			core.LogInfoF("%s updated command alias %s.", m.Author.Username, cmd)
+			m.ReplyToChannel("Command alias for **%s** updated successfully.", cmd)
+			return
+		}
+	}
+	core.LogDebug("Command was not updated.")
+	m.ReplyToChannel("Internal error. Unable to update command alias.")
+}
+
+func removeCommand(m *dispatch.Message) {
+	if len(m.Args) == 0 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command>.")
+		return
+	}
+	cmd := m.Args[0]
+
+	if !database.RemoveCommandAlias(cmd) {
+		m.ReplyToChannel("**Error:** Command **%s** doesn't exist.")
+		return
+	}
+	core.LogInfoF("%s removed command alias %s.", m.Author.Username, cmd)
+	m.ReplyToChannel("Command %s removed.", cmd)
 }
 
 func listCommands(m *dispatch.Message) {
@@ -160,7 +236,7 @@ func (*custom) handleAnything(m *dispatch.Message) bool {
 
 func handleCommandGroup(grp *database.CommandGroup, m *dispatch.Message) {
 	var output []string
-	output = append(output, fmt.Sprint("**Category ", grp.Command, "**: "))
+	output = append(output, fmt.Sprint("Category **", grp.Command, "**: "))
 	if grp.Help != nil && len(*grp.Help) > 0 {
 		output[0] = fmt.Sprint(output, *grp.Help)
 	}

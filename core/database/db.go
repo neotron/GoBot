@@ -3,12 +3,28 @@ package database
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 
 	"GoBot/core"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
+)
+
+type FieldName string
+type TableName string
+
+const (
+	HelpField      FieldName = "help"
+	LongHelpField  FieldName = "longhelp"
+	PMEnabledField FieldName = "pmenabled"
+	ValueField     FieldName = "value"
+	GroupIdField   FieldName = "group_id"
+	ParentField    FieldName = "parent"
+
+	CommandAliasTable TableName = "commandalias"
+	CommandGroupTable TableName = "commandgroup"
 )
 
 var schema = `
@@ -78,11 +94,15 @@ func FetchCommandAlias(cmd string) *CommandAlias {
 	}
 	command := CommandAlias{}
 	err := database.Get(&command, "SELECT * FROM commandalias WHERE command=$1", cmd)
-	if err != nil {
-		core.LogErrorF("Failed to fetch command %s: %s", cmd, err)
+	switch err {
+	default:
+		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
+		fallthrough
+	case sql.ErrNoRows:
 		return nil
+	case nil:
+		return &command
 	}
-	return &command
 }
 
 func HasCommandAlias(cmd string) bool {
@@ -94,14 +114,20 @@ func HasCommandAlias(cmd string) bool {
 	}
 	count := count{}
 	err := database.Get(&count, "SELECT count(*) count FROM commandalias WHERE command=$1", cmd)
-	if err != nil {
+	switch err {
+	default:
 		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
+		fallthrough
+	case sql.ErrNoRows:
 		return false
+	case nil:
+		return count.Count > 0
 	}
-	return count.Count > 0
 }
 
-func ExecuteAndCommit(action func(tx *sql.Tx) (sql.Result, error)) (res sql.Result, err error) {
+type executeFunc func(tx *sql.Tx) (sql.Result, error)
+
+func executeAndCommit(action executeFunc) (res sql.Result, err error) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -126,8 +152,24 @@ func ExecuteAndCommit(action func(tx *sql.Tx) (sql.Result, error)) (res sql.Resu
 	return
 }
 
+func RemoveCommandAlias(cmd string) bool {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec("DELETE FROM commandalias where command = $1", cmd)
+	})
+	switch err {
+	default:
+		core.LogError("Failed to remove command: ", err)
+		fallthrough
+	case sql.ErrNoRows:
+		return false
+	case nil:
+		affected, err := res.RowsAffected()
+		return err == nil && affected > 0
+	}
+}
+
 func CreateCommandAlias(cmd, val string) bool {
-	_, err := ExecuteAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+	_, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
 		return tx.Exec("INSERT INTO commandalias (command, value, pmenabled) VALUES ($1, $2, FALSE)", cmd, val)
 	})
 	if err != nil {
@@ -135,6 +177,29 @@ func CreateCommandAlias(cmd, val string) bool {
 		return false
 	}
 	return true
+}
+
+func updateTable(table TableName, cmd string, field FieldName, val interface{}) bool {
+	_, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		if val == nil {
+			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = NULL WHERE command = $1", table, field), cmd)
+		} else {
+			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = $1 WHERE command = $2", table, field), val, cmd)
+		}
+	})
+	if err != nil {
+		core.LogError("Failed to update command: ", err)
+		return false
+	}
+	return true
+}
+
+func UpdateCommandAlias(cmd string, field FieldName, val interface{}) bool {
+	return updateTable(CommandAliasTable, cmd, field, val)
+}
+
+func UpdateCommandGroup(cmd string, field FieldName, val interface{}) bool {
+	return updateTable(CommandGroupTable, cmd, field, val)
 }
 
 func HasCommandGroup(cmd string) bool {
@@ -146,11 +211,15 @@ func HasCommandGroup(cmd string) bool {
 	}
 	count := count{}
 	err := database.Get(&count, "SELECT count(*) count FROM commandgroup WHERE command=$1", cmd)
-	if err != nil {
+	switch err {
+	default:
 		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
+		fallthrough
+	case sql.ErrNoRows:
 		return false
+	case nil:
+		return count.Count > 0
 	}
-	return count.Count > 0
 }
 
 func FetchCommandGroup(cmd string) *CommandGroup {
@@ -162,11 +231,15 @@ func FetchCommandGroup(cmd string) *CommandGroup {
 	}
 	command := CommandGroup{}
 	err := database.Get(&command, "SELECT * FROM commandgroup WHERE command=$1", cmd)
-	if err != nil {
+	switch err {
+	default:
 		core.LogErrorF("Failed to fetch command group %s: %s", cmd, err)
+		fallthrough
+	case sql.ErrNoRows:
 		return nil
+	case nil:
+		return &command
 	}
-	return &command
 }
 
 func FetchCommandGroups() []CommandGroup {
@@ -175,11 +248,15 @@ func FetchCommandGroups() []CommandGroup {
 
 	var groups []CommandGroup
 	err := database.Select(&groups, "SELECT * FROM commandgroup ORDER BY command ASC")
-	if err != nil {
+	switch err {
+	default:
 		core.LogErrorF("Failed to fetch command groups: %s", err)
+		fallthrough
+	case sql.ErrNoRows:
 		return nil
+	case nil:
+		return groups
 	}
-	return groups
 }
 
 func (c *CommandGroup) FetchCommands() []CommandAlias {
@@ -188,11 +265,15 @@ func (c *CommandGroup) FetchCommands() []CommandAlias {
 
 	var commands []CommandAlias
 	err := database.Select(&commands, "SELECT * FROM commandalias WHERE group_id=$1 ORDER BY command ASC", c.Id)
-	if err != nil {
-		core.LogErrorF("Failed to fetch commands for command group %s: %s", c.Command, err)
+	switch err {
+	default:
+		core.LogErrorF("Failed to fetch commands group: %s", err)
+		fallthrough
+	case sql.ErrNoRows:
 		return nil
+	case nil:
+		return commands
 	}
-	return commands
 }
 
 func FetchStandaloneCommands() []CommandAlias {
@@ -201,9 +282,13 @@ func FetchStandaloneCommands() []CommandAlias {
 
 	var commands []CommandAlias
 	err := database.Select(&commands, "SELECT * FROM commandalias WHERE group_id IS NULL ORDER BY command ASC")
-	if err != nil {
-		core.LogErrorF("Failed to fetch standalone commands: %s", err)
+	switch err {
+	default:
+		core.LogErrorF("Failed to fetch standalone commandsXS: %s", err)
+		fallthrough
+	case sql.ErrNoRows:
 		return nil
+	case nil:
+		return commands
 	}
-	return commands
 }
