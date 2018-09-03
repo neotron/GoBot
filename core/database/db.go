@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sync"
 
 	"GoBot/core"
 	"github.com/jmoiron/sqlx"
@@ -22,6 +21,7 @@ const (
 	ValueField     FieldName = "value"
 	GroupIdField   FieldName = "group_id"
 	ParentField    FieldName = "parent"
+	CommandField   FieldName = "command"
 
 	CommandAliasTable TableName = "commandalias"
 	CommandGroupTable TableName = "commandgroup"
@@ -43,7 +43,7 @@ CREATE INDEX IF NOT EXISTS commandgroup_parent_index ON commandgroup (parent);
 `
 
 type CommandAlias struct {
-	Id             int
+	Id             int64
 	PMEnabled      bool
 	GroupId        *int `db:"group_id"`
 	Command, Value string
@@ -51,23 +51,22 @@ type CommandAlias struct {
 }
 
 type CommandGroup struct {
-	Id      int
+	Id      int64
 	Parent  *int
 	Command string
 	Help    *string
 }
 
 type UserRole struct {
-	Id     int
+	Id     int64
 	Role   int
 	UserId int `db:"user_id"`
 }
 type count struct {
-	Count int
+	Count int64
 }
 
 var database *sqlx.DB
-var mu sync.RWMutex
 
 func InitalizeDatabase() {
 	db, err := sqlx.Connect("sqlite3", core.Settings.Database())
@@ -86,8 +85,6 @@ func Close() {
 }
 
 func FetchCommandAlias(cmd string) *CommandAlias {
-	mu.RLock()
-	defer mu.RUnlock()
 	if database == nil {
 		core.LogError("Database isn't open. Shouldn't happen.")
 		return nil
@@ -106,8 +103,6 @@ func FetchCommandAlias(cmd string) *CommandAlias {
 }
 
 func HasCommandAlias(cmd string) bool {
-	mu.RLock()
-	defer mu.RUnlock()
 	if database == nil {
 		core.LogError("Database isn't open. Shouldn't happen.")
 		return false
@@ -128,9 +123,6 @@ func HasCommandAlias(cmd string) bool {
 type executeFunc func(tx *sql.Tx) (sql.Result, error)
 
 func executeAndCommit(action executeFunc) (res sql.Result, err error) {
-	mu.Lock()
-	defer mu.Unlock()
-
 	if database == nil {
 		err = errors.New("database not open")
 		return
@@ -179,32 +171,35 @@ func CreateCommandAlias(cmd, val string) bool {
 	return true
 }
 
-func updateTable(table TableName, cmd string, field FieldName, val interface{}) bool {
-	_, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+func updateTable(table TableName, whereKey FieldName, whereVal interface{}, field FieldName, val interface{}) bool {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
 		if val == nil {
-			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = NULL WHERE command = $1", table, field), cmd)
+			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = NULL WHERE %s = $1", table, field, whereKey), whereVal)
 		} else {
-			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = $1 WHERE command = $2", table, field), val, cmd)
+			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = $1 WHERE %s = $2", table, field, whereKey), val, whereVal)
 		}
 	})
 	if err != nil {
 		core.LogError("Failed to update command: ", err)
 		return false
 	}
-	return true
+	numRows, err := res.RowsAffected()
+	if err != nil {
+		core.LogError("Failed to fetch affected rows: ", err)
+		return false
+	}
+	return numRows > 0
 }
 
-func UpdateCommandAlias(cmd string, field FieldName, val interface{}) bool {
-	return updateTable(CommandAliasTable, cmd, field, val)
+func UpdateCommandAlias(whereKey FieldName, whereVal interface{}, field FieldName, val interface{}) bool {
+	return updateTable(CommandAliasTable, whereKey, whereVal, field, val)
 }
 
-func UpdateCommandGroup(cmd string, field FieldName, val interface{}) bool {
-	return updateTable(CommandGroupTable, cmd, field, val)
+func UpdateCommandGroup(whereKey FieldName, whereVal interface{}, field FieldName, val interface{}) bool {
+	return updateTable(CommandGroupTable, whereKey, whereVal, field, val)
 }
 
 func HasCommandGroup(cmd string) bool {
-	mu.RLock()
-	defer mu.RUnlock()
 	if database == nil {
 		core.LogError("Database isn't open. Shouldn't happen.")
 		return false
@@ -222,9 +217,23 @@ func HasCommandGroup(cmd string) bool {
 	}
 }
 
+func RemoveCommandGroup(cmd string) bool {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec("DELETE FROM commandgroup where command = $1", cmd)
+	})
+	switch err {
+	default:
+		core.LogError("Failed to remove command group: ", err)
+		fallthrough
+	case sql.ErrNoRows:
+		return false
+	case nil:
+		affected, err := res.RowsAffected()
+		return err == nil && affected > 0
+	}
+}
+
 func FetchCommandGroup(cmd string) *CommandGroup {
-	mu.RLock()
-	defer mu.RUnlock()
 	if database == nil {
 		core.LogError("Database isn't open. Shouldn't happen.")
 		return nil
@@ -241,11 +250,28 @@ func FetchCommandGroup(cmd string) *CommandGroup {
 		return &command
 	}
 }
+func FetchOrCreateCommandGroup(cmd string) *CommandGroup {
+	command := FetchCommandGroup(cmd)
+	if command == nil {
+		// Try to create a new one
+		command = &CommandGroup{Command: cmd}
+		res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+			return tx.Exec("INSERT INTO commandgroup (command) VALUES ($1)", cmd)
+		})
+		if err != nil {
+			core.LogErrorF("Failed to create new command group %s.", cmd)
+			return nil
+		}
+		command.Id, err = res.LastInsertId()
+		if err != nil {
+			core.LogErrorF("Failed to get last insert id for command group, attempting fetch.")
+			command = FetchCommandGroup(cmd)
+		}
+	}
+	return command
+}
 
 func FetchCommandGroups() []CommandGroup {
-	mu.RLock()
-	defer mu.RUnlock()
-
 	var groups []CommandGroup
 	err := database.Select(&groups, "SELECT * FROM commandgroup ORDER BY command ASC")
 	switch err {
@@ -260,9 +286,6 @@ func FetchCommandGroups() []CommandGroup {
 }
 
 func (c *CommandGroup) FetchCommands() []CommandAlias {
-	mu.RLock()
-	defer mu.RUnlock()
-
 	var commands []CommandAlias
 	err := database.Select(&commands, "SELECT * FROM commandalias WHERE group_id=$1 ORDER BY command ASC", c.Id)
 	switch err {
@@ -277,9 +300,6 @@ func (c *CommandGroup) FetchCommands() []CommandAlias {
 }
 
 func FetchStandaloneCommands() []CommandAlias {
-	mu.RLock()
-	defer mu.RUnlock()
-
 	var commands []CommandAlias
 	err := database.Select(&commands, "SELECT * FROM commandalias WHERE group_id IS NULL ORDER BY command ASC")
 	switch err {

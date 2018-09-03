@@ -37,7 +37,7 @@ func init() {
 			{EditCommand, "Replace text for existing command. Arguments: *<command> <new text>*"},
 			{SetHelpText, "Set (or remove) a help string for an existing command or category. Arguments: *<command or category> [help text]*"},
 			{AddToCategory, "Add an existing command to a category. Category will be created if it doesn't exist. Arguments: *<category> <command>*"},
-			{RemoveFromCategory, "Remove a command from a category. Arguments: *<category> <command>*"},
+			{RemoveFromCategory, "Remove a command from a category. Arguments: *<command>*"},
 			{DeleteCategory, "Delete an existing category. Commands in the category will not be removed. Arguments: *<category>*"},
 			{ListCommands, "List existing custom commands and categories."},
 		},
@@ -62,10 +62,13 @@ func (c *custom) handleCommand(m *dispatch.Message) bool {
 		setHelpText(m)
 		break
 	case AddToCategory:
+		addToCategory(m)
 		break
 	case RemoveFromCategory:
+		removeFromCategory(m)
 		break
 	case DeleteCategory:
+		deleteCategory(m)
 		break
 	case ListCommands:
 		listCommands(m)
@@ -82,6 +85,83 @@ func getCommandText(m *dispatch.Message) *string {
 	}
 	text := strings.Join(m.RawArgs[1:], " ")
 	return &text
+}
+
+func deleteCategory(m *dispatch.Message) {
+	if len(m.Args) != 1 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <category>")
+		return
+	}
+	catName := m.Args[0]
+	cat := database.FetchCommandGroup(catName)
+	if cat == nil {
+		m.ReplyToChannel("**Error:** No category named **%s** found.", catName)
+		return
+	}
+
+	database.UpdateCommandAlias(database.GroupIdField, cat.Id, database.GroupIdField, nil)
+	if !database.RemoveCommandGroup(catName) {
+		m.ReplyToChannel("**Error:** Failed to remove command group %s.", catName)
+		return
+	}
+	m.ReplyToChannel("Removed command group %s.", catName)
+}
+
+func addToCategory(m *dispatch.Message) {
+	if len(m.Args) < 2 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <category> <command>")
+		return
+	}
+
+	if !database.HasCommandAlias(m.Args[1]) {
+		m.ReplyToChannel("Command **%s** doesn't exist.", m.Args[1])
+		return
+	}
+
+	if database.HasCommandAlias(m.Args[0]) || dispatch.Dispatcher.HasCommand(m.Args[0]) {
+		m.ReplyToChannel("Error: Cannot add category **%s** since there's already a command with that name.", m.Args[0])
+		return
+	}
+
+	categoryObj := database.FetchOrCreateCommandGroup(m.Args[0])
+	if categoryObj == nil {
+		// Make new category.
+		m.ReplyToChannel("Internal Error: Unable to load or create category **%s**.", m.Args[0])
+		return
+	}
+	commands := categoryObj.FetchCommands()
+	for _, cmdObj := range commands {
+		if cmdObj.Command == m.Args[1] {
+			m.ReplyToChannel("Command **%s** already in category **%s**.", m.Args[1], m.Args[0])
+			return
+		}
+	}
+	if !database.UpdateCommandAlias(database.CommandField, m.Args[1], database.GroupIdField, categoryObj.Id) {
+		m.ReplyToChannel("Internal Error: Failed to add command **%s** to category **%s**.", m.Args[1], m.Args[0])
+	}
+	m.ReplyToChannel("Command **%s** added to category **%s**.", m.Args[1], m.Args[0])
+}
+
+func removeFromCategory(m *dispatch.Message) {
+	if len(m.Args) != 1 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command>")
+		return
+	}
+	cmdName := m.Args[0]
+	cmd := database.FetchCommandAlias(cmdName)
+	if cmd == nil {
+		m.ReplyToChannel("No command named **%s** found.", cmdName)
+		return
+	}
+	if cmd.GroupId == nil {
+		m.ReplyToChannel("**%s** is not part of a category.", cmdName)
+		return
+	}
+	if !database.UpdateCommandAlias(database.CommandField, cmdName, database.GroupIdField, nil) {
+		m.ReplyToChannel("Failed to remove category from command **%s**.", cmdName)
+		return
+	}
+	m.ReplyToChannel("**%s** removed from category successfully.", cmdName)
 }
 
 func addCommand(m *dispatch.Message) {
@@ -130,7 +210,7 @@ func setHelpText(m *dispatch.Message) {
 		cmd = m.Args[0]
 	}
 	if database.HasCommandAlias(cmd) {
-		if database.UpdateCommandAlias(cmd, database.HelpField, helpText) {
+		if database.UpdateCommandAlias(database.CommandField, cmd, database.HelpField, helpText) {
 			core.LogInfoF("%s updated help text for command %s.", m.Author.Username, cmd)
 			m.ReplyToChannel("Help text for command %s was updated.", cmd)
 		} else {
@@ -138,7 +218,7 @@ func setHelpText(m *dispatch.Message) {
 			m.ReplyToChannel("Internal error. Unable to update command alias.")
 		}
 	} else if database.HasCommandGroup(cmd) {
-		if database.UpdateCommandGroup(cmd, database.HelpField, helpText) {
+		if database.UpdateCommandGroup(database.CommandField, cmd, database.HelpField, helpText) {
 			core.LogInfoF("%s updated help text for command group %s.", m.Author.Username, cmd)
 			m.ReplyToChannel("Help text for command group %s was updated.", cmd)
 		} else {
@@ -162,7 +242,7 @@ func editCommand(m *dispatch.Message) {
 		return
 	}
 	if commandText := getCommandText(m); commandText != nil {
-		ok := database.UpdateCommandAlias(cmd, database.ValueField, commandText)
+		ok := database.UpdateCommandAlias(database.CommandField, cmd, database.ValueField, commandText)
 		if ok {
 			core.LogInfoF("%s updated command alias %s.", m.Author.Username, cmd)
 			m.ReplyToChannel("Command alias for **%s** updated successfully.", cmd)
@@ -238,7 +318,7 @@ func handleCommandGroup(grp *database.CommandGroup, m *dispatch.Message) {
 	var output []string
 	output = append(output, fmt.Sprint("Category **", grp.Command, "**: "))
 	if grp.Help != nil && len(*grp.Help) > 0 {
-		output[0] = fmt.Sprint(output, *grp.Help)
+		output[0] = fmt.Sprint(output[0], *grp.Help)
 	}
 	if sortedCommands := grp.FetchCommands(); sortedCommands != nil {
 		for _, command := range sortedCommands {
