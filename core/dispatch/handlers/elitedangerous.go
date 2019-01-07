@@ -86,9 +86,7 @@ func handleBearingAndDistance(m *dispatch.Message) {
 }
 
 func handleKlyPerHour(m *dispatch.Message) {
-	if len(m.Args) < 1 {
-		return
-	}
+
 	var jumpRange float64
 	var jumpTime = 45.0
 	var effiency = 95.0
@@ -117,7 +115,7 @@ func handleKlyPerHour(m *dispatch.Message) {
 		}
 	default:
 		m.ReplyToChannel("Incorrect arguments. Expected: <jump range> [time per jump in seconds] [efficiency]")
-
+		return
 	}
 
 	jumpsPerHour := 3600.0 / jumpTime
