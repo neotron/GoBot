@@ -63,13 +63,15 @@ func (m Message) ReplyToSender(format string, v ...interface{}) chan struct{} {
 // Interface used for message handlers
 type MessageHandler interface {
 	// Process requests for Command with this prefix.
-	handlePrefix(string, *Message) bool
+	HandlePrefix(string, string, *Message) bool
 	// Process Command requests for the specific Command.
-	handleCommand(*Message) bool
+	HandleCommand(*Message) bool
 	// Wildcard handling for any Command.
-	handleAnything(*Message) bool
+	HandleAnything(*Message) bool
 	// Optional group for this command
 	CommandGroup() string
+	// Called when settings file are loaded
+	SettingsLoaded()
 }
 
 // Each message handler can process one or more commands / message responses
@@ -79,15 +81,18 @@ func (*NoOpMessageHandler) CommandGroup() string {
 	return ""
 }
 
-func (*NoOpMessageHandler) handlePrefix(string, *Message) bool {
+func (*NoOpMessageHandler) SettingsLoaded() {
+}
+
+func (*NoOpMessageHandler) HandlePrefix(string, string, *Message) bool {
 	return false
 }
 
-func (*NoOpMessageHandler) handleCommand(*Message) bool {
+func (*NoOpMessageHandler) HandleCommand(*Message) bool {
 	return false
 }
 
-func (*NoOpMessageHandler) handleAnything(*Message) bool {
+func (*NoOpMessageHandler) HandleAnything(*Message) bool {
 	return false
 }
 

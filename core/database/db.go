@@ -22,9 +22,12 @@ const (
 	GroupIdField   FieldName = "group_id"
 	ParentField    FieldName = "parent"
 	CommandField   FieldName = "command"
+	RoleField      FieldName = "role"
+	UserIdField    FieldName = "user_id"
 
 	CommandAliasTable TableName = "commandalias"
 	CommandGroupTable TableName = "commandgroup"
+	UserRoleTable TableName = "userrole"
 )
 
 var schema = `

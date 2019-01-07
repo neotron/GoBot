@@ -43,6 +43,10 @@ func LoadSettings(settingsfile string) {
 
 }
 
+// Get location of resources
+func (s *SettingsStorage) ResourceDirectory() string {
+	return s.data.ResourceDirectory
+}
 // Get the bot auth tooken
 func (s *SettingsStorage) AuthToken() string {
 	return s.data.AuthToken

@@ -50,7 +50,7 @@ func init() {
 		}, nil, false)
 }
 
-func (s *edsm) handleCommand(m *dispatch.Message) bool {
+func (s *edsm) HandleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case "loc":
 		handleLocationLookup(strings.Join(m.Args, " "), m)

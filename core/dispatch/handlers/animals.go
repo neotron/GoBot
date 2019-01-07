@@ -29,7 +29,7 @@ func init() {
 		}, false)
 }
 
-func (*animals) handlePrefix(prefix string, m *dispatch.Message) bool {
+func (*animals) HandlePrefix(prefix, suffix string, m *dispatch.Message) bool {
 	switch m.Command {
 	case "randomcat":
 		go handleRandomCat(m)
@@ -45,14 +45,13 @@ func (*animals) handlePrefix(prefix string, m *dispatch.Message) bool {
 	return true
 }
 
-func (a *animals) handleCommand(m *dispatch.Message) bool {
+func (a *animals) HandleCommand(m *dispatch.Message) bool {
 	switch len(m.Args) {
 	case 0:
 		m.ReplyToChannel("I know of the following random images: cat, dog corgi and kitten.")
 		return true
 	case 1:
-		m.Command += strings.ToLower(m.Args[0])
-		return a.handlePrefix(m.Command, m)
+		return a.HandlePrefix("random", strings.ToLower(m.Args[0]), m)
 	default:
 		return false // Only handle empty random
 	}

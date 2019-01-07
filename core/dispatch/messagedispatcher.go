@@ -57,7 +57,7 @@ func (d *MessageDispatcher) HasCommand(cmd string) bool {
 }
 
 // This handle basically deals with help
-func (d *MessageDispatcher) handleCommand(m *Message) bool {
+func (d *MessageDispatcher) HandleCommand(m *Message) bool {
 	go func() {
 		groups := funk.Keys(d.commandHelp).([]string)
 		sort.Strings(groups)
@@ -83,6 +83,38 @@ func (d *MessageDispatcher) handleCommand(m *Message) bool {
 	return true
 }
 
+func SettingsLoaded() {
+	cache := make(map[string]bool)
+	isCalled := func(h MessageHandler) bool {
+		key := h.CommandGroup()
+		if cache[key] {
+			return true
+		}
+		cache[key] = true
+		return false
+	}
+	for _, handler := range Dispatcher.anythingHandlers {
+		if !isCalled(handler) {
+			handler.SettingsLoaded()
+		}
+	}
+	for _, handlers := range Dispatcher.prefixHandlers {
+		for _, handler := range handlers {
+			if !isCalled(handler) {
+				handler.SettingsLoaded()
+			}
+		}
+	}
+	for _, handlers := range Dispatcher.commandHandlers {
+		for _, handler := range handlers {
+			if !isCalled(handler) {
+				handler.SettingsLoaded()
+			}
+		}
+	}
+}
+
+
 func Dispatch(session *discordgo.Session, message *discordgo.Message) {
 	Dispatcher.Dispatch(session, message)
 }
@@ -103,8 +135,10 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 	// And this will trim the configured command prefix, which is optional if @Bot syntax is used
 	trimmed = strings.TrimPrefix(trimmed, core.Settings.CommandPrefix())
 	// And finally, if we didn't trim anything, check to see if it was a DM.
+	var isDM bool
 	if trimmed == message.Content {
-		isDM, err := comesFromDM(session, message)
+		var err error
+		isDM, err = comesFromDM(session, message)
 		if !isDM || err != nil {
 			return
 		}
@@ -127,12 +161,12 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 	args = args[1:]
 	cmdMessage := &Message{
 		message, session, command, args,
-		rawArgs[1:], parseCommandFlags(args), isDirectAddressed,
+		rawArgs[1:], parseCommandFlags(args), isDM,
 	}
 	if commandHandlers := d.commandHandlers[command]; len(commandHandlers) > 0 {
 		core.LogDebugF("Found %d Command handlers for %s.", len(commandHandlers), command)
 		for _, handler := range commandHandlers {
-			if handler.handleCommand(cmdMessage) {
+			if handler.HandleCommand(cmdMessage) {
 				core.LogDebug("   => handled.")
 				return
 			}
@@ -143,9 +177,10 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 		if !strings.HasPrefix(command, prefix) {
 			continue
 		}
+		suffix := strings.TrimPrefix(command, prefix)
 		core.LogDebugF("Found %d prefix handlers for %s.", len(handlers), prefix)
 		for _, handler := range handlers {
-			if handler.handlePrefix(prefix, cmdMessage) {
+			if handler.HandlePrefix(prefix, suffix, cmdMessage) {
 				if core.IsLogDebug() {
 					core.LogDebugF("   => handled by %s.", toName(handler))
 				}
@@ -158,7 +193,7 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 		if core.IsLogDebug() {
 			core.LogDebugF("Trying anything handler %s...", toName(handler))
 		}
-		if handler.handleAnything(cmdMessage) {
+		if handler.HandleAnything(cmdMessage) {
 			core.LogDebug("    => handled")
 			return
 		}

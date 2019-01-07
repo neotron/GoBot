@@ -23,7 +23,7 @@ func (*ping) CommandGroup() string {
 	return "Test Commands"
 }
 
-func (*ping) handleCommand(m *dispatch.Message) bool {
+func (*ping) HandleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case "ping":
 		m.ReplyToChannel("Pong!")
@@ -37,11 +37,11 @@ func (*ping) handleCommand(m *dispatch.Message) bool {
 	return true
 }
 
-func (*ping) handlePrefix(prefix string, m *dispatch.Message) bool {
-	switch m.Command {
-	case "testping":
+func (*ping) HandlePrefix(prefix, suffix string, m *dispatch.Message) bool {
+	switch suffix {
+	case "ping":
 		m.ReplyToChannel("Pong!")
-	case "testpong":
+	case "pong":
 		m.ReplyToChannel("Ping!")
 	default:
 		return false
@@ -49,7 +49,7 @@ func (*ping) handlePrefix(prefix string, m *dispatch.Message) bool {
 	return true
 }
 
-func (*ping) handleAnything(m *dispatch.Message) bool {
+func (*ping) HandleAnything(m *dispatch.Message) bool {
 	switch m.Command {
 	case "anyping":
 		m.ReplyToChannel("Pong!")

@@ -30,6 +30,7 @@ func main() {
 	core.LoadSettings(settingsFile)
 	database.InitalizeDatabase()
 	defer database.Close()
+	dispatch.SettingsLoaded()
 
 	// Create a new Discord session using the provided bot token.
 	dg, err := discordgo.New("Bot " + core.Settings.AuthToken())

@@ -22,7 +22,7 @@ func init() {
 		nil, false)
 }
 
-func (*ident) handleCommand(m *dispatch.Message) bool {
+func (*ident) HandleCommand(m *dispatch.Message) bool {
 	var identities []string
 	addAuthor := func(user *discordgo.User) {
 		identities = append(identities, fmt.Sprintf("%v has id %s", user.Username, user.ID))

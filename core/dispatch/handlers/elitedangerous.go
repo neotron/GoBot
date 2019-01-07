@@ -31,7 +31,7 @@ func init() {
 		}, nil, false)
 }
 
-func (s *elitedangerous) handleCommand(m *dispatch.Message) bool {
+func (s *elitedangerous) HandleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case "g":
 		handleGravity(m)

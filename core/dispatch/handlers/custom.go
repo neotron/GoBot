@@ -44,11 +44,7 @@ func init() {
 		nil, true)
 }
 
-func (*custom) handlePrefix(string, *dispatch.Message) bool {
-	return false
-}
-
-func (c *custom) handleCommand(m *dispatch.Message) bool {
+func (c *custom) HandleCommand(m *dispatch.Message) bool {
 	switch m.Command {
 	case AddCommand:
 		addCommand(m)
@@ -301,20 +297,20 @@ func listCommands(m *dispatch.Message) {
 	}
 }
 
-func (*custom) handleAnything(m *dispatch.Message) bool {
+func (*custom) HandleAnything(m *dispatch.Message) bool {
 	if cmd := database.FetchCommandAlias(m.Command); cmd != nil {
-		handleCommandAlias(cmd, m)
+		HandleCommandAlias(cmd, m)
 		return true
 	}
 
 	if grp := database.FetchCommandGroup(m.Command); grp != nil {
-		handleCommandGroup(grp, m)
+		HandleCommandGroup(grp, m)
 		return true
 	}
 	return false
 }
 
-func handleCommandGroup(grp *database.CommandGroup, m *dispatch.Message) {
+func HandleCommandGroup(grp *database.CommandGroup, m *dispatch.Message) {
 	var output []string
 	output = append(output, fmt.Sprint("Category **", grp.Command, "**: "))
 	if grp.Help != nil && len(*grp.Help) > 0 {
@@ -332,7 +328,7 @@ func handleCommandGroup(grp *database.CommandGroup, m *dispatch.Message) {
 	m.ReplyToChannel(strings.Join(output, "\n"))
 }
 
-func handleCommandAlias(cmd *database.CommandAlias, m *dispatch.Message) {
+func HandleCommandAlias(cmd *database.CommandAlias, m *dispatch.Message) {
 	if m.Flags.IsSet(dispatch.Help) {
 		if cmd.Help != nil && len(*cmd.Help) > 0 {
 			var helpMessage = fmt.Sprintf("**%s%s**: %s", core.Settings.CommandPrefix(),
