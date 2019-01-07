@@ -115,7 +115,7 @@ func handleWaypoint(m *dispatch.Message) {
 			return
 		}
 		if wp < 0 || wp > len(waypoints) {
-			m.ReplyToChannel("Waypoint %d is invalid, or not yet announced (there are currently %d known waypoints)", len(waypoints))
+			m.ReplyToChannel("Waypoint %d is invalid, or not yet announced (there are currently %d known waypoints)", wp, len(waypoints))
 		}
 		break
 	default:
