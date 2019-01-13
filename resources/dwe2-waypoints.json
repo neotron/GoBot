@@ -1,18 +1,34 @@
 [
   {
-      "start": "Pallaeni",
-      "end": "The Omega Nebula",
-      "routeMap": "https://i.imgur.com/lKBZhIp.jpg",
-      "poi": [
-        "Shapley 1",
-        "The View",
-        "Cycladia",
-        "The View",
-        "Labirinto",
-        "Thor's Eye",
-        "Lagoon Nebula",
-        "Cinnabar Moth Nebula",
-        "The PW2010 Supercluster"
-      ]
-    }
+    "start": "Pallaeni",
+    "end": "The Omega Nebula",
+    "routeMap": "https://i.imgur.com/lKBZhIp.jpg",
+    "poi": [
+      "Shapley 1",
+      "The View",
+      "Cycladia",
+      "The View",
+      "Labirinto",
+      "Thor's Eye",
+      "Lagoon Nebula",
+      "Cinnabar Moth Nebula",
+      "The PW2010 Supercluster"
+    ]
+  },
+  {
+    "start": "Pallaeni",
+    "end": "The Omega Nebula",
+    "routeMap": "https://i.imgur.com/lKBZhIp.jpg",
+    "poi": [
+      "Shapley 1",
+      "The View",
+      "Cycladia",
+      "The View",
+      "Labirinto",
+      "Thor's Eye",
+      "Lagoon Nebula",
+      "Cinnabar Moth Nebula",
+      "The PW2010 Supercluster"
+    ]
+  }
 ]
