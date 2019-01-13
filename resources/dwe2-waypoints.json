@@ -1,11 +1,18 @@
 [
   {
-    "start": "Pallaeni",
-   	"end": "To be announced",
-    "routeMap": "To be announced",
-    "poi": [
-      "To be announced",
-      "To be announced"
-    ]
-  }
+      "start": "Pallaeni",
+      "end": "The Omega Nebula",
+      "routeMap": "https://i.imgur.com/lKBZhIp.jpg",
+      "poi": [
+        "Shapley 1",
+        "The View",
+        "Cycladia",
+        "The View",
+        "Labirinto",
+        "Thor's Eye",
+        "Lagoon Nebula",
+        "Cinnabar Moth Nebula",
+        "The PW2010 Supercluster"
+      ]
+    }
 ]
