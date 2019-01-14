@@ -268,15 +268,13 @@ func listCommands(m *dispatch.Message) {
 	var output []string
 	prefix := core.Settings.CommandPrefix()
 	if groups := database.FetchCommandGroups(); len(groups) > 0 {
-		output = append(output, "**Commands by Category**:\n\t")
-		groups := funk.Map(groups, func(group database.CommandGroup) string {
+		funk.ForEach(groups, func(group database.CommandGroup) {
 			cmdString := "No commands in category."
 			if cmds := group.FetchCommands(); cmds != nil {
 				cmdString = strings.Join(funk.Map(cmds, func(cmd database.CommandAlias) string { return cmd.Command }).([]string), ", ")
 			}
-			return fmt.Sprintf(" **%s%s:**\n\t%s", prefix, group.Command, cmdString)
-		}).([]string)
-		output = append(output, strings.Join(groups, "\n"))
+			m.ReplyToSender(fmt.Sprintf("**%s%s:**\n\t%s\n", prefix, group.Command, cmdString))
+		})
 	} else {
 		output = append(output, "**Categories:** \n\tNone found")
 	}
@@ -290,11 +288,7 @@ func listCommands(m *dispatch.Message) {
 	}
 
 	outputString := strings.Join(output, "\n")
-	if m.Flags.IsSet(dispatch.Here) {
-		m.ReplyToChannel(outputString)
-	} else {
-		m.ReplyToSender(outputString)
-	}
+	m.ReplyToSender(outputString)
 }
 
 func (*custom) HandleAnything(m *dispatch.Message) bool {
