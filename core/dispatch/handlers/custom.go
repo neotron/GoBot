@@ -319,7 +319,7 @@ func HandleCommandGroup(grp *database.CommandGroup, m *dispatch.Message) {
 			output = append(output, cmdline)
 		}
 	}
-	m.ReplyToChannel(strings.Join(output, "\n"))
+	m.ReplyToChannel("%s", strings.Join(output, "\n"))
 }
 
 func HandleCommandAlias(cmd *database.CommandAlias, m *dispatch.Message) {
@@ -340,11 +340,11 @@ func HandleCommandAlias(cmd *database.CommandAlias, m *dispatch.Message) {
 					helpMessage = longHelpMessage
 				}
 			}
-			m.ReplyToChannel(helpMessage)
+			m.ReplyToChannel("%s", helpMessage)
 		} else {
 			m.ReplyToChannel("**%s%s**: No help available.", core.Settings.CommandPrefix(), cmd.Command)
 		}
 	} else {
-		m.ReplyToChannel(cmd.Value)
+		m.ReplyToChannel("%s", cmd.Value)
 	}
 }
