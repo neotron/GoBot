@@ -15,12 +15,17 @@
       "Shapley 1",
       "The View",
       "Cycladia",
-      "The View",
       "Labirinto",
       "Thor's Eye",
       "Lagoon Nebula",
       "Cinnabar Moth Nebula",
       "The PW2010 Supercluster"
     ]
+  },
+  {
+    "end": "Stay tuned until Jan 27th!",
+    "start": "The Omega Nebula",
+    "routeMap": "N/A",
+    "poi": [ "N/A"]
   }
 ]
