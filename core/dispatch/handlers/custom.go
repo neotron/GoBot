@@ -19,6 +19,7 @@ const (
 	RemoveCommand      = "rmcmd"
 	EditCommand        = "editcmd"
 	SetHelpText        = "sethelp"
+	SetIsDm            = "setisdm"
 	AddToCategory      = "addtocat"
 	RemoveFromCategory = "rmfromcat"
 	DeleteCategory     = "delcat"
@@ -40,6 +41,7 @@ func init() {
 			{RemoveFromCategory, "Remove a command from a category. Arguments: *<command>*"},
 			{DeleteCategory, "Delete an existing category. Commands in the category will not be removed. Arguments: *<category>*"},
 			{ListCommands, "List existing custom commands and categories."},
+			{SetIsDm, "Toggle whether or not the output from this command is sent in a DM or not."},
 		},
 		nil, true)
 }
@@ -68,6 +70,10 @@ func (c *custom) HandleCommand(m *dispatch.Message) bool {
 		break
 	case ListCommands:
 		listCommands(m)
+		break
+	case SetIsDm:
+		toggleIsDm(m);
+		break
 	default:
 		return false
 	}
@@ -226,6 +232,33 @@ func setHelpText(m *dispatch.Message) {
 	}
 }
 
+func toggleIsDm(m *dispatch.Message) {
+	if len(m.Args) == 0 {
+		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command>")
+		return
+	}
+
+	cmd := m.Args[0]
+
+	cmdAlias := database.FetchCommandAlias(cmd)
+	if cmdAlias != nil {
+		newDm := !cmdAlias.PMEnabled
+		if database.UpdateCommandAlias(database.CommandField, cmd, database.PMEnabledField, newDm) {
+			messageType := "channel"
+			if newDm {
+				messageType = "direct message"
+			}
+			core.LogInfoF("%s set command %s send method to %.", m.Author.Username, cmd, messageType)
+			m.ReplyToChannel("Command %s will now be sent via %s.", cmd, messageType)
+		} else {
+			core.LogDebug("Command was not updated due to error.")
+			m.ReplyToChannel("Internal error. Unable to toggle sending via DM.")
+		}
+	} else {
+		m.ReplyToChannel("**Error:** No command **%s** found.", cmd)
+	}
+}
+
 func editCommand(m *dispatch.Message) {
 	if len(m.Args) < 2 {
 		m.ReplyToChannel("**Error:** Invalid syntax. Expected: <command> <new text>")
@@ -330,7 +363,7 @@ func HandleCommandAlias(cmd *database.CommandAlias, m *dispatch.Message) {
 			if cmd.Longhelp != nil && len(*cmd.Longhelp) > 0 {
 				longHelpMessage := fmt.Sprint(helpMessage, "\n\n", *cmd.Longhelp)
 				if cmd.PMEnabled {
-					m.ReplyToSender(longHelpMessage)
+					m.ReplyToSender("%s", longHelpMessage)
 					if m.IsPM {
 						// Since it's a PM, no further messages are needed.
 						return
@@ -344,7 +377,10 @@ func HandleCommandAlias(cmd *database.CommandAlias, m *dispatch.Message) {
 		} else {
 			m.ReplyToChannel("**%s%s**: No help available.", core.Settings.CommandPrefix(), cmd.Command)
 		}
+	} else if cmd.PMEnabled {
+		m.ReplyToSender("%s", cmd.Value)
 	} else {
 		m.ReplyToChannel("%s", cmd.Value)
+
 	}
 }
