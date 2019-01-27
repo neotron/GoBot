@@ -23,8 +23,20 @@
     ]
   },
   {
-    "end": "Stay tuned until Jan 27th!",
     "start": "The Omega Nebula",
+    "end": "The Conflux Abandoned Settlements",
+    "routeMap": "https://i.imgur.com/DehqzBv.jpg",
+    "poi": [
+      "The Arkgamanon Mountain Range",
+      "NGC 6629",
+      "Eagle Nebula",
+      "Eudaemon Anchorage",
+      "Quantum World"
+    ]
+  },
+  {
+    "end": "To Be Announced",
+    "start": "Conflux Abandoned Settlements",
     "routeMap": "N/A",
     "poi": [ "N/A"]
   }

@@ -124,9 +124,6 @@ func handleWaypoint(m *dispatch.Message) {
 		return
 	}
 	waypoint := waypoints[wp - 1]
-	if !m.IsPM {
-		m.ReplyToChannel("%s, sent you a PM with the waypoint information.", m.Author.Username)
-	}
 	m.ReplyToSender("Waypoint %d\nArrive at: **%s**\nLeave from: **%s**\n\nPlaces to visit on the way to the next waypoint:\n\n * %s\n\nRoute Map: %s\n\nFor details about base camp location and reference stars for the POI's visit the forum thread: <https://tinyurl.com/yah9wgkj>\n",
 		wp, waypoint.End, waypoint.Start, strings.Join(waypoint.Poi, "\n * "), waypoint.RouteMap)
 
