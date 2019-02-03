@@ -35,8 +35,21 @@
     ]
   },
   {
+    "start": "The Conflux Abandoned Settlements",
+    "end": "Llyn Tegid Nebula",
+    "routeMap": "https://i.imgur.com/9Ryv6at.jpg",
+    "poi": [
+      "Rusty Net Nebula",
+      "Skaude (Collection of Wonders)",
+      "Skaudai Guardian Ruins",
+      "Sacaqawea Space Port",
+      "Spear Thistle Nebula",
+      "Octopus Nebula"
+    ]
+  },
+  {
     "end": "To Be Announced",
-    "start": "Conflux Abandoned Settlements",
+    "start": "Llyn Tegid Nebula",
     "routeMap": "N/A",
     "poi": [ "N/A"]
   }
