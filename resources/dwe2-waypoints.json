@@ -48,8 +48,21 @@
     ]
   },
   {
-    "end": "To Be Announced",
     "start": "Llyn Tegid Nebula",
+    "end": "Polo Harbour",
+    "routeMap": "https://i.imgur.com/qWF7PKO.jpg",
+    "poi": [
+      "Gagarin Gate",
+      "Amaethon Nebula (and the Polonium Fields)",
+      "Death Spiral",
+      "Michell's Legacy",
+      "Clockwork Rings",
+      "Crayfish Nebula"
+    ]
+  },
+  {
+    "end": "To Be Announced",
+    "start": "Polo Harbour",
     "routeMap": "N/A",
     "poi": [ "N/A"]
   }
