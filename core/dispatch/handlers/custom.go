@@ -24,6 +24,8 @@ const (
 	RemoveFromCategory = "rmfromcat"
 	DeleteCategory     = "delcat"
 	ListCommands       = "listcmds"
+
+	SecureChannnel = "546085681219239936"
 )
 
 func (*custom) CommandGroup() string {
@@ -46,10 +48,15 @@ func init() {
 		nil, true)
 }
 
-func (c *custom) HandleCommand(m *dispatch.Message) bool {
+func (c *custom) SecureHandleCommand(m *dispatch.Message) bool {
+	if m.ChannelID != SecureChannnel {
+		m.ReplyToChannel("Sorry, but no.")
+		return true
+	}
 	switch m.Command {
 	case AddCommand:
 		addCommand(m)
+		break
 	case RemoveCommand:
 		removeCommand(m)
 		break
@@ -68,14 +75,21 @@ func (c *custom) HandleCommand(m *dispatch.Message) bool {
 	case DeleteCategory:
 		deleteCategory(m)
 		break
-	case ListCommands:
-		listCommands(m)
-		break
 	case SetIsDm:
 		toggleIsDm(m);
 		break
 	default:
 		return false
+	}
+	return true
+}
+func (c *custom) HandleCommand(m *dispatch.Message) bool {
+	switch m.Command {
+	case ListCommands:
+		listCommands(m)
+		break
+	default:
+		return c.SecureHandleCommand(m)
 	}
 	return true
 }
