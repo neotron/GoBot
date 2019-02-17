@@ -61,8 +61,20 @@
     ]
   },
   {
-    "end": "To Be Announced",
     "start": "Polo Harbour",
+    "end": "The Dryau Awesomes",
+    "routeMap": "https://i.imgur.com/hdPcMVf.jpg",
+    "poi": [
+      "Phiaanor",
+      "Ocularis Coelum",
+      "Fosforon",
+      "Pink Flame Nebula",
+      "Cloverfield Planetary Nebula"
+    ]
+  },
+  {
+    "end": "To Be Announced",
+    "start": "The Dryau Awesomes",
     "routeMap": "N/A",
     "poi": [ "N/A"]
   }
