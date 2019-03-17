@@ -73,8 +73,47 @@
     ]
   },
   {
-    "end": "To Be Announced",
     "start": "The Dryau Awesomes",
+    "end": "Armstrong Landing",
+    "routeMap": "https://i.imgur.com/ojXlMM5.jpg",
+    "poi": [
+      "Shrogaei Nebula Cluster",
+      "Galionas",
+      "Caeruleum Luna",
+      "Great Annihilator",
+      "Zunuae Nebula",
+      "Wulfric",
+      "Sagittarius A*"
+    ]
+  },
+  {
+    "start": "Sagittarius A*",
+    "end": "Goliath's Rest",
+    "routeMap": "https://i.imgur.com/DrdJaB1.jpg",
+    "poi": [
+      "Phua Aub Nebula Cluster",
+      "Crown Of Ice",
+      "Silver Highway",
+      "Dark Eye Nebula",
+      "Braisio Juliet Nebula Cluster",
+      "Breakthrough Echoes"
+    ]
+  },
+  {
+    "start": "Goliath's Rest",
+    "end": "Cerulean Tranquility",
+    "routeMap": "https://i.imgur.com/MMEC0TZ.jpg",
+    "poi": [
+      "Iris' Missive",
+      "Blue Rhapsody Nebula",
+      "Forgotten Twins Nebula",
+      "Dances with Giants"
+    ]
+  },
+
+  {
+    "end": "To Be Announced",
+    "start": "Cerulean Tranquility",
     "routeMap": "N/A",
     "poi": [ "N/A"]
   }
