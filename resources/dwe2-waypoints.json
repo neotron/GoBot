@@ -110,10 +110,20 @@
       "Dances with Giants"
     ]
   },
-
+  {
+    "start": "Cerulean Tranquility",
+    "end": "Morphenniel Nebula",
+    "routeMap": "https://i.imgur.com/xqS0CAN.jpg",
+    "poi": [
+      "The Zinnia Haze",
+      "Hydrangea Nebula",
+      "Magnus Nebula",
+      "Neighbouring Necklaces"
+    ]
+  },
   {
     "end": "To Be Announced",
-    "start": "Cerulean Tranquility",
+    "start": "Morphenniel Nebula",
     "routeMap": "N/A",
     "poi": [ "N/A"]
   }
