@@ -122,9 +122,18 @@
     ]
   },
   {
-    "end": "To Be Announced",
     "start": "Morphenniel Nebula",
-    "routeMap": "N/A",
-    "poi": [ "N/A"]
+    "end": "Luna's Shadow",
+    "routeMap": "https://i.imgur.com/8XaCosd.jpg",
+    "poi": [
+      "Aristo",
+      "Kalipheron"
+    ]
+  },
+  {
+    "end": "Beagle Point",
+    "start": "Luna's Shadow",
+    "routeMap": "TBA",
+    "poi": [ "TBA"]
   }
 ]
