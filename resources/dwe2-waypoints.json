@@ -131,9 +131,15 @@
     ]
   },
   {
-    "end": "Beagle Point",
     "start": "Luna's Shadow",
-    "routeMap": "TBA",
-    "poi": [ "TBA"]
+    "end": "Beagle Point",
+    "routeMap": "https://i.imgur.com/S5uoUZV.jpg",
+    "poi": [
+      "The Seldowitch Nebula",
+      "Fly Trap Nebula",
+      "Lone Star",
+      "Thomaski Point Memorial",
+      "Grand Rings"
+    ]
   }
 ]
