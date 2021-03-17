@@ -1,5 +1,7 @@
 module GoBot
 
+go 1.14
+
 require (
 	github.com/bwmarrin/discordgo v0.18.0
 	github.com/gorilla/websocket v1.3.0 // indirect
