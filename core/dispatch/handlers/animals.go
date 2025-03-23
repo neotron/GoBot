@@ -31,16 +31,19 @@ func init() {
 }
 
 func (*animals) HandlePrefix(prefix, suffix string, m *dispatch.Message) bool {
-	switch m.Command {
-	case "randomcat":
-		go handleRandomCat(m)
-	case "randomdog":
-		go handleRandomCat(m)
-	case "randomkitten":
+	switch suffix {
+	case "whale", "pikachu":
+		go handleRandomImage(m, suffix)
+	case "kitten":
 		m.ReplyToChannel("http://www.randomkittengenerator.com/cats/rotator.php/%d.jpg", time.Now().Nanosecond())
-	case "randomcorgi":
+	case "corgi":
 		go handleRandomCorgi(m)
+	case "cat", "dog", "bird", "panda", "fox", "kangaroo", "raccoon":
+		go handleRandomAnimal(m, suffix, true)
+	case "redpanda":
+		go handleRandomAnimal(m, "red_panda", false)
 	default:
+		m.ReplyToChannel("%s is an unknown animal.", suffix)
 		return false
 	}
 	return true
@@ -49,37 +52,36 @@ func (*animals) HandlePrefix(prefix, suffix string, m *dispatch.Message) bool {
 func (a *animals) HandleCommand(m *dispatch.Message) bool {
 	switch len(m.Args) {
 	case 0:
-		m.ReplyToChannel("I know of the following random images: cat, dog corgi and kitten.")
+		m.ReplyToChannel("I know of the following random images: cat, dog, corgi, kitten, bird, panda, fox, kangaroo, raccoon, red panda, whale and pikachu.")
 		return true
 	case 1:
 		return a.HandlePrefix("random", strings.ToLower(m.Args[0]), m)
+	case 2:
+		return a.HandlePrefix("random", strings.ToLower(m.Args[0]+m.Args[1]), m)
 	default:
 		return false // Only handle empty random
 	}
 }
 
-func handleRandomCat(m *dispatch.Message) {
-	type meowModel struct {
-		Id     string `json:"id"`
-		Url    string `json:"url"`
-		Width  int    `json:"width"`
-		Height int    `json:"height"`
+func handleRandomImage(m *dispatch.Message, image string) {
+	type imageModel struct {
+		Url string `json:"link"`
 	}
-	res, err := http.Get("https://api.thecatapi.com/v1/images/search")
+	res, err := http.Get(fmt.Sprintf("https://some-random-api.com/img/%s", image))
 	if err != nil {
-		m.ReplyToChannel("Unfortunately, I failed to find any random cats for you today. :-(")
+		m.ReplyToChannel("Unfortunately, I failed to find a random %s for you today. :-(", image)
 		core.LogError("Failed to get meow: ", err)
 		return
 	}
-	var models []meowModel
+	var model imageModel
 	decoder := json.NewDecoder(res.Body)
-	err = decoder.Decode(&models)
-	if err != nil || len(models) == 0 || len(models[0].Url) == 0 {
-		m.ReplyToChannel("The cats were not parsable today. :-(")
+	err = decoder.Decode(&model)
+	if err != nil || len(model.Url) == 0 {
+		m.ReplyToChannel("The %s were not parsable today. :-(", image)
 		core.LogError("Failed to parse response", err)
 		return
 	}
-	m.ReplyToChannel(models[0].Url)
+	m.ReplyToChannel(model.Url)
 }
 
 func handleRandomDog(m *dispatch.Message, breed string) {
@@ -110,4 +112,31 @@ func handleRandomDog(m *dispatch.Message, breed string) {
 
 func handleRandomCorgi(m *dispatch.Message) {
 	handleRandomDog(m, "corgi")
+}
+
+func handleRandomAnimal(m *dispatch.Message, breed string, showFacts bool) {
+	type animalModel struct {
+		Url  string `json:"image"`
+		Fact string `json:"fact"`
+	}
+	url := fmt.Sprintf("https://some-random-api.com/animal/%s", breed)
+	res, err := http.Get(url)
+	if err != nil {
+		m.ReplyToChannel("Unfortunately, I failed to find a random %s for you today. :-(", breed)
+		core.LogError("Failed to get animal: ", err)
+		return
+	}
+	var model animalModel
+	decoder := json.NewDecoder(res.Body)
+	err = decoder.Decode(&model)
+	if err != nil || len(model.Url) == 0 {
+		m.ReplyToChannel("The %s were not parsable today. :-(", breed)
+		core.LogError("Failed to parse response", err)
+		return
+	}
+	if showFacts {
+		m.ReplyToChannel("%s\n\n%s", model.Fact, model.Url)
+	} else {
+		m.ReplyToChannel(model.Url)
+	}
 }
