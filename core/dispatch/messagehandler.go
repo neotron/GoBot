@@ -27,7 +27,7 @@ type MessageCommand struct {
 	Help    string // Help string
 }
 
-// Container for a message, session and parsed arguments.
+// Message Container for a message, session and parsed arguments.
 type Message struct {
 	*discordgo.Message
 	*discordgo.Session
@@ -41,12 +41,12 @@ type Test interface {
 	cat() string
 }
 
-// Utility method to send quick reply back to the channel
+// ReplyToChannel Utility method to send quick reply back to the channel
 func (m Message) ReplyToChannel(format string, v ...interface{}) {
 	m.ChannelMessageSend(m.ChannelID, fmt.Sprintf(format, v...))
 }
 
-// Utility method to send a reply to the author of the message
+// ReplyToSender Utility method to send a reply to the author of the message
 func (m Message) ReplyToSender(format string, v ...interface{}) chan struct{} {
 	sendDone := make(chan struct{})
 	go func() {
@@ -60,21 +60,23 @@ func (m Message) ReplyToSender(format string, v ...interface{}) chan struct{} {
 	return sendDone
 }
 
-// Interface used for message handlers
+// MessageHandler Interface used for message handlers
 type MessageHandler interface {
-	// Process requests for Command with this prefix.
+	// HandlePrefix Process requests for Command with this prefix.
 	HandlePrefix(string, string, *Message) bool
-	// Process Command requests for the specific Command.
+	// HandleCommand Process Command requests for the specific Command.
 	HandleCommand(*Message) bool
-	// Wildcard handling for any Command.
+	// HandleAnything Wildcard handling for any Command.
 	HandleAnything(*Message) bool
-	// Optional group for this command
+	// CommandGroup Optional group for this command
 	CommandGroup() string
-	// Called when settings file are loaded
+	// SettingsLoaded Called when settings file are loaded
 	SettingsLoaded()
+	// SlashCommands Returns any slash command registrations for this handler
+	//	SlashCommands() []*discordgo.ApplicationCommand
 }
 
-// Each message handler can process one or more commands / message responses
+// NoOpMessageHandler Each message handler can process one or more commands / message responses
 type NoOpMessageHandler struct{}
 
 func (*NoOpMessageHandler) CommandGroup() string {

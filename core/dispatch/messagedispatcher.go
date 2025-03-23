@@ -10,7 +10,7 @@ import (
 	"github.com/thoas/go-funk"
 )
 
-// This class will parse and dispatch commands to the appropriate Command handler.
+// MessageDispatcher This class will parse and dispatch commands to the appropriate Command handler.
 // It also filters out any response from messages sent by itself, and which don't have the proper
 // Command prefix, as defined in the config file
 type MessageDispatcher struct {
@@ -25,7 +25,7 @@ type MessageDispatcher struct {
 	commandHelp map[string]map[string][]string
 }
 
-// Object used for dispatching messages to the handlers.
+// Dispatcher Object used for dispatching messages to the handlers.
 var Dispatcher = MessageDispatcher{
 	prefixHandlers:  map[string][]MessageHandler{},
 	commandHandlers: map[string][]MessageHandler{},
@@ -56,7 +56,7 @@ func (d *MessageDispatcher) HasCommand(cmd string) bool {
 	return d.commandHandlers[cmd] != nil || d.prefixHandlers[cmd] != nil
 }
 
-// This handle basically deals with help
+// HandleCommand This handle basically deals with help
 func (d *MessageDispatcher) HandleCommand(m *Message) bool {
 	go func() {
 		groups := funk.Keys(d.commandHelp).([]string)
@@ -114,12 +114,11 @@ func SettingsLoaded() {
 	}
 }
 
-
 func Dispatch(session *discordgo.Session, message *discordgo.Message) {
 	Dispatcher.Dispatch(session, message)
 }
 
-// Parse and dispatch the message.
+// Dispatch Parse and dispatch the message.
 func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discordgo.Message) {
 	// Short-circuit if author of the message is the bot itself to avoid loops
 	if message.Author == nil || message.Author.ID == session.State.User.ID {

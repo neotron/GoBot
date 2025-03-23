@@ -7,6 +7,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ func (*animals) HandlePrefix(prefix, suffix string, m *dispatch.Message) bool {
 	case "randomcat":
 		go handleRandomCat(m)
 	case "randomdog":
-		m.ReplyToChannel("http://www.randomdoggiegenerator.com/randomdoggie.php/%d.jpg", time.Now().Nanosecond())
+		go handleRandomCat(m)
 	case "randomkitten":
 		m.ReplyToChannel("http://www.randomkittengenerator.com/cats/rotator.php/%d.jpg", time.Now().Nanosecond())
 	case "randomcorgi":
@@ -59,33 +60,54 @@ func (a *animals) HandleCommand(m *dispatch.Message) bool {
 
 func handleRandomCat(m *dispatch.Message) {
 	type meowModel struct {
-		File string
+		Id     string `json:"id"`
+		Url    string `json:"url"`
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
 	}
-	res, err := http.Get("http://aws.random.cat/meow")
-	defer res.Body.Close()
+	res, err := http.Get("https://api.thecatapi.com/v1/images/search")
 	if err != nil {
 		m.ReplyToChannel("Unfortunately, I failed to find any random cats for you today. :-(")
 		core.LogError("Failed to get meow: ", err)
 		return
 	}
-	var model meowModel
+	var models []meowModel
 	decoder := json.NewDecoder(res.Body)
-	err = decoder.Decode(&model)
-	if err != nil || len(model.File) == 0 {
+	err = decoder.Decode(&models)
+	if err != nil || len(models) == 0 || len(models[0].Url) == 0 {
 		m.ReplyToChannel("The cats were not parsable today. :-(")
 		core.LogError("Failed to parse response", err)
 		return
 	}
-	m.ReplyToChannel(model.File)
+	m.ReplyToChannel(models[0].Url)
+}
+
+func handleRandomDog(m *dispatch.Message, breed string) {
+	type woofModel struct {
+		Url    string `json:"message"`
+		Status string `json:"status"`
+	}
+	url := "https://api.thecatapi.com/v1/images/search"
+	if breed != "" {
+		url = fmt.Sprintf("https://dog.ceo/api/breed/%s/images/random", breed)
+	}
+	res, err := http.Get(url)
+	if err != nil {
+		m.ReplyToChannel("Unfortunately, I failed to find any random cats for you today. :-(")
+		core.LogError("Failed to get meow: ", err)
+		return
+	}
+	var model woofModel
+	decoder := json.NewDecoder(res.Body)
+	err = decoder.Decode(&model)
+	if err != nil || model.Status != "success" || len(model.Url) == 0 {
+		m.ReplyToChannel("The doggos were not parsable today. :-(")
+		core.LogError("Failed to parse response", err)
+		return
+	}
+	m.ReplyToChannel(model.Url)
 }
 
 func handleRandomCorgi(m *dispatch.Message) {
-	res, err := http.Head("http://cor.gi/random")
-	if err != nil {
-		m.ReplyToChannel("Unfortunately, I failed produce a suitable corgy today. :-(")
-		core.LogError("Failed to get corgi: ", err)
-		return
-	}
-	m.ReplyToChannel("%v", res.Request.URL)
-	//	m.ReplyToChannel(model.File)
+	handleRandomDog(m, "corgi")
 }
