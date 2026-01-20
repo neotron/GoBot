@@ -3,11 +3,18 @@ package handlers
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"GoBot/core"
 	"GoBot/core/database"
 	"GoBot/core/dispatch"
 	"github.com/thoas/go-funk"
+)
+
+var (
+	commandCooldowns   = make(map[string]time.Time)
+	commandCooldownsMu sync.Mutex
 )
 
 type custom struct {
@@ -338,8 +345,37 @@ func listCommands(m *dispatch.Message) {
 	m.ReplyToSender(outputString)
 }
 
+// isOnCooldown checks if a command+channel combo is on cooldown and updates the last used time if not
+func isOnCooldown(command, channelID string) bool {
+	cooldownSeconds := core.Settings.CustomCommandCooldown()
+	if cooldownSeconds <= 0 {
+		return false
+	}
+
+	// Create a key combining command and channel
+	key := command + ":" + channelID
+
+	commandCooldownsMu.Lock()
+	defer commandCooldownsMu.Unlock()
+
+	now := time.Now()
+	if lastUsed, exists := commandCooldowns[key]; exists {
+		if now.Sub(lastUsed) < time.Duration(cooldownSeconds)*time.Second {
+			return true
+		}
+	}
+	commandCooldowns[key] = now
+	return false
+}
+
 func (*custom) HandleAnything(m *dispatch.Message) bool {
 	if cmd := database.FetchCommandAlias(m.Command); cmd != nil {
+		// Skip cooldown check for DMs and whitelisted channels
+		if !m.IsPM && !core.Settings.IsChannelCooldownWhitelisted(m.ChannelID) {
+			if isOnCooldown(m.Command, m.ChannelID) {
+				return true // Silently ignore if on cooldown
+			}
+		}
 		HandleCommandAlias(cmd, m)
 		return true
 	}
