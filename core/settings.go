@@ -7,15 +7,27 @@ import (
 	"github.com/jcelliott/lumber"
 )
 
+// CarrierConfig defines a fleet carrier from config
+type CarrierConfig struct {
+	StationId string `json:"stationId"` // Carrier callsign e.g. "W7H-6DZ"
+	Name      string `json:"name"`      // Display name e.g. "DSEV Odysseus"
+	InaraId   int    `json:"inaraId"`   // Inara station ID for linking (optional)
+}
+
 type jsonData struct {
-	Development                  bool
-	AuthToken                    string
-	CommandPrefix                string
-	Database                     string
-	ResourceDirectory            string
-	OwnerIds                     []string
-	CustomCommandCooldown        int      // Cooldown in seconds between same custom command uses (0 = no cooldown)
-	CooldownWhitelistChannels    []string // Channel IDs exempt from cooldown (e.g., bot-spam channels)
+	Development            bool
+	AuthToken              string
+	CommandPrefix          string
+	Database               string
+	ResourceDirectory      string
+	OwnerIds               []string
+	CustomCommandCooldown  int             // Cooldown in seconds between same custom command uses (0 = no cooldown)
+	BotChannels            []string        // Channel IDs for bot-spam (cooldown exempt, carriers reply in channel)
+	CarrierOwnerIds        []string        // Discord user IDs who can manage carriers
+	Carriers               []CarrierConfig // Fleet carrier definitions
+	SlashCommandGuildId      string          // Guild ID for slash commands (empty = global, can take 1hr to propagate)
+	CarrierUpdateChannelId   string          // Channel ID to watch for carrier status updates
+	CarrierFlightLogChannelId string         // Channel ID to post carrier change logs
 }
 
 type SettingsStorage struct {
@@ -74,17 +86,62 @@ func (s *SettingsStorage) CustomCommandCooldown() int {
 	return s.data.CustomCommandCooldown
 }
 
-// CooldownWhitelistChannels returns the list of channel IDs exempt from cooldown
-func (s *SettingsStorage) CooldownWhitelistChannels() []string {
-	return s.data.CooldownWhitelistChannels
+// BotChannels returns the list of bot channel IDs
+func (s *SettingsStorage) BotChannels() []string {
+	return s.data.BotChannels
 }
 
-// IsChannelCooldownWhitelisted checks if a channel ID is exempt from cooldown
-func (s *SettingsStorage) IsChannelCooldownWhitelisted(channelID string) bool {
-	for _, id := range s.data.CooldownWhitelistChannels {
+// IsBotChannel checks if a channel ID is a bot channel
+func (s *SettingsStorage) IsBotChannel(channelID string) bool {
+	for _, id := range s.data.BotChannels {
 		if id == channelID {
 			return true
 		}
 	}
 	return false
+}
+
+// CarrierOwnerIds returns the list of carrier commander Discord user IDs
+func (s *SettingsStorage) CarrierOwnerIds() []string {
+	return s.data.CarrierOwnerIds
+}
+
+// IsCarrierOwner checks if a user ID can manage carriers
+func (s *SettingsStorage) IsCarrierOwner(userID string) bool {
+	for _, id := range s.data.CarrierOwnerIds {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// Carriers returns the list of configured carriers
+func (s *SettingsStorage) Carriers() []CarrierConfig {
+	return s.data.Carriers
+}
+
+// GetCarrierByStationId finds a carrier config by station ID
+func (s *SettingsStorage) GetCarrierByStationId(stationId string) *CarrierConfig {
+	for i := range s.data.Carriers {
+		if s.data.Carriers[i].StationId == stationId {
+			return &s.data.Carriers[i]
+		}
+	}
+	return nil
+}
+
+// SlashCommandGuildId returns the guild ID for slash command registration (empty = global)
+func (s *SettingsStorage) SlashCommandGuildId() string {
+	return s.data.SlashCommandGuildId
+}
+
+// CarrierUpdateChannelId returns the channel ID to watch for carrier status updates
+func (s *SettingsStorage) CarrierUpdateChannelId() string {
+	return s.data.CarrierUpdateChannelId
+}
+
+// CarrierFlightLogChannelId returns the channel ID for carrier change logs
+func (s *SettingsStorage) CarrierFlightLogChannelId() string {
+	return s.data.CarrierFlightLogChannelId
 }

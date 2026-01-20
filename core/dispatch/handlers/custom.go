@@ -370,8 +370,8 @@ func isOnCooldown(command, channelID string) bool {
 
 func (*custom) HandleAnything(m *dispatch.Message) bool {
 	if cmd := database.FetchCommandAlias(m.Command); cmd != nil {
-		// Skip cooldown check for DMs and whitelisted channels
-		if !m.IsPM && !core.Settings.IsChannelCooldownWhitelisted(m.ChannelID) {
+		// Skip cooldown check for DMs and bot channels
+		if !m.IsPM && !core.Settings.IsBotChannel(m.ChannelID) {
 			if isOnCooldown(m.Command, m.ChannelID) {
 				return true // Silently ignore if on cooldown
 			}

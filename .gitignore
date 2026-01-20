@@ -170,3 +170,6 @@ Temporary Items
 /go.sum
 /config-live.json
 /devdata
+
+# Git worktrees
+.worktrees/

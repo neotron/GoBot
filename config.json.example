@@ -9,7 +9,34 @@
     "of people capable of bot admin"
   ],
   "customCommandCooldown": 20,
-  "cooldownWhitelistChannels": [
+  "botChannels": [
     "channel ID for bot-spam etc"
+  ],
+  "carrierOwnerIds": [
+    "Discord user ID of carrier commanders"
+  ],
+  "carrierUpdateChannelId": "channel ID for carrier status updates",
+  "carrierFlightLogChannelId": "channel ID for carrier change logs",
+  "carriers": [
+    {
+      "stationId": "W7H-6DZ",
+      "name": "DSEV Odysseus",
+      "inaraId": 184006
+    },
+    {
+      "stationId": "V2W-85Z",
+      "name": "DSEV Distant Suns",
+      "inaraId": 0
+    },
+    {
+      "stationId": "V4V-2XZ",
+      "name": "DSEC Fimbulthul",
+      "inaraId": 0
+    },
+    {
+      "stationId": "TBQ-6VX",
+      "name": "Pillar of Chista",
+      "inaraId": 0
+    }
   ]
 }

@@ -81,6 +81,9 @@ func InitalizeDatabase() {
 	// database drivers;  pq will exec them all, sqlite3 won't, ymmv
 	db.MustExec(schema)
 	database = db
+
+	// Initialize carrier table
+	InitializeCarrierTable()
 }
 
 func Close() {
