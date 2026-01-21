@@ -10,14 +10,19 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+var (
+	permissionAdministrator = int64(discordgo.PermissionAdministrator)
+)
+
 var carrierSlashCommands = []*discordgo.ApplicationCommand{
 	{
 		Name:        "carriers",
 		Description: "List all fleet carriers with current status",
 	},
 	{
-		Name:        "carrierjump",
-		Description: "Set carrier jump time",
+		Name:                     "carrierjump",
+		Description:              "Set carrier jump time",
+		DefaultMemberPermissions: &permissionAdministrator,
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:         discordgo.ApplicationCommandOptionString,
@@ -35,8 +40,9 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        "carrierdest",
-		Description: "Set carrier destination",
+		Name:                     "carrierdest",
+		Description:              "Set carrier destination",
+		DefaultMemberPermissions: &permissionAdministrator,
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:         discordgo.ApplicationCommandOptionString,
@@ -54,8 +60,9 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        "carrierstatus",
-		Description: "Set carrier status message",
+		Name:                     "carrierstatus",
+		Description:              "Set carrier status message",
+		DefaultMemberPermissions: &permissionAdministrator,
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:         discordgo.ApplicationCommandOptionString,
@@ -73,8 +80,9 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        "carrierclear",
-		Description: "Clear carrier field",
+		Name:                     "carrierclear",
+		Description:              "Clear carrier field",
+		DefaultMemberPermissions: &permissionAdministrator,
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:         discordgo.ApplicationCommandOptionString,
@@ -98,8 +106,9 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:        "carrierloc",
-		Description: "Set carrier location manually",
+		Name:                     "carrierloc",
+		Description:              "Set carrier location manually",
+		DefaultMemberPermissions: &permissionAdministrator,
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:         discordgo.ApplicationCommandOptionString,
