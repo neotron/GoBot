@@ -173,3 +173,4 @@ Temporary Items
 
 # Git worktrees
 .worktrees/
+/GoBot
