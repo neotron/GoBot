@@ -125,7 +125,7 @@ func (d *MessageDispatcher) Dispatch(session *discordgo.Session, message *discor
 		return
 	}
 
-	core.LogDebug("Got message: ", message.Content)
+	core.LogTrace("Got message: ", message.Content)
 
 	// This handles @BotName command trimming
 	trimmed := strings.TrimPrefix(message.Content, fmt.Sprintf("<@%s> ", session.State.User.ID))

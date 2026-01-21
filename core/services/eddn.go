@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -16,7 +17,9 @@ import (
 )
 
 const (
-	eddnRelayURL = "tcp://eddn.edcd.io:9500"
+	eddnRelayURL              = "tcp://eddn.edcd.io:9500"
+	carrierJumpCooldown       = 20 * 60 // 20 minutes in seconds
+	suspiciousDistanceThreshold = 500.0 // ly - max expected single jump distance
 )
 
 // EDDNMessage is the outer wrapper for all EDDN messages
@@ -61,6 +64,17 @@ type FSCarrierState struct {
 
 // carrierCallsigns maps our carrier station IDs for quick lookup
 var carrierCallsigns map[string]bool
+
+// suspiciousLocation tracks unvalidated location updates
+type suspiciousLocation struct {
+	System      string
+	EventTime   int64
+	FirstSeen   int64
+	Validations int // number of independent confirmations
+}
+
+// suspiciousLocations maps stationId -> pending suspicious location
+var suspiciousLocations = make(map[string]*suspiciousLocation)
 
 // StartEDDNListener starts the EDDN listener in a goroutine
 func StartEDDNListener() {
@@ -143,13 +157,13 @@ func processEDDNMessage(compressed []byte) {
 	// Route based on schema
 	switch {
 	case strings.Contains(eddnMsg.Schema, "/journal/"):
-		processJournalMessage(eddnMsg.Message)
+		processJournalMessage(eddnMsg.Message, eddnMsg.Header.UploaderID)
 	case strings.Contains(eddnMsg.Schema, "/fscarrierstate/"):
-		processFSCarrierState(eddnMsg.Message)
+		processFSCarrierState(eddnMsg.Message, eddnMsg.Header.UploaderID)
 	}
 }
 
-func processJournalMessage(raw json.RawMessage) {
+func processJournalMessage(raw json.RawMessage, uploaderID string) {
 	var msg JournalMessage
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		return
@@ -160,34 +174,40 @@ func processJournalMessage(raw json.RawMessage) {
 	case "CarrierJump":
 		// CarrierJump includes the carrier ID and destination - carrier has jumped
 		if msg.CarrierID != "" && carrierCallsigns[msg.CarrierID] {
-			updateCarrierFromEDDN(msg.CarrierID, msg.StarSystem, msg.Timestamp, msg.Event)
+			updateCarrierFromEDDN(msg.CarrierID, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
 			// Clear pending jump since the jump completed
 			database.ClearCarrierPendingJump(msg.CarrierID)
 		}
 	case "CarrierJumpRequest":
 		// Carrier jump has been scheduled
-		if msg.CarrierID != "" && carrierCallsigns[msg.CarrierID] {
-			updateCarrierPendingJump(msg.CarrierID, msg.StarSystem, msg.DepartureTime)
+		if msg.CarrierID != "" {
+			core.LogDebugF("EDDN CarrierJumpRequest: %s -> %s (departure: %s) [%s]", msg.CarrierID, msg.StarSystem, msg.DepartureTime, uploaderID)
+			if carrierCallsigns[msg.CarrierID] {
+				updateCarrierPendingJump(msg.CarrierID, msg.StarSystem, msg.DepartureTime)
+			}
 		}
 	case "CarrierJumpCancelled":
 		// Carrier jump has been cancelled
-		if msg.CarrierID != "" && carrierCallsigns[msg.CarrierID] {
-			clearCarrierPendingJump(msg.CarrierID)
+		if msg.CarrierID != "" {
+			core.LogDebugF("EDDN CarrierJumpCancelled: %s [%s]", msg.CarrierID, uploaderID)
+			if carrierCallsigns[msg.CarrierID] {
+				clearCarrierPendingJump(msg.CarrierID)
+			}
 		}
 	case "Location", "FSDJump":
 		// If the station name matches a carrier callsign format (XXX-XXX)
 		if isCarrierCallsign(msg.StationName) && carrierCallsigns[msg.StationName] {
-			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event)
+			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
 		}
 	case "Docked":
 		// Docked at a carrier
 		if isCarrierCallsign(msg.StationName) && carrierCallsigns[msg.StationName] {
-			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event)
+			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
 		}
 	}
 }
 
-func processFSCarrierState(raw json.RawMessage) {
+func processFSCarrierState(raw json.RawMessage, uploaderID string) {
 	var msg FSCarrierState
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		return
@@ -200,11 +220,11 @@ func processFSCarrierState(raw json.RawMessage) {
 	}
 
 	if carrierCallsigns[callsign] {
-		updateCarrierFromEDDN(callsign, msg.StarSystem, msg.Timestamp, msg.Event)
+		updateCarrierFromEDDN(callsign, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
 	}
 }
 
-func updateCarrierFromEDDN(stationId, system, timestamp, eventType string) {
+func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID string) {
 	if system == "" {
 		return
 	}
@@ -223,10 +243,11 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType string) {
 		eventTimeStr = time.Now().Format("2006-01-02 15:04:05")
 	}
 
-	// Sanity check: reject timestamps more than 1 minute in the future
 	now := time.Now().Unix()
+
+	// Sanity check: reject timestamps more than 1 minute in the future
 	if eventTime > now+60 {
-		core.LogDebugF("EDDN: Skipping future %s for %s at %s (event: %d, now: %d)", eventType, stationId, eventTimeStr, eventTime, now)
+		core.LogDebugF("EDDN: Skipping future %s for %s at %s (event: %d, now: %d) [%s]", eventType, stationId, eventTimeStr, eventTime, now, uploaderID)
 		return
 	}
 
@@ -234,18 +255,115 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType string) {
 	state := database.FetchCarrierState(stationId)
 	if state != nil && state.LocationUpdated != nil && *state.LocationUpdated >= eventTime {
 		// We already have a newer or same-time update, skip
-		core.LogDebugF("EDDN: Skipping old %s for %s at %s (have: %d)", eventType, stationId, eventTimeStr, *state.LocationUpdated)
+		core.LogDebugF("EDDN: Skipping old %s for %s at %s (have: %d) [%s]", eventType, stationId, eventTimeStr, *state.LocationUpdated, uploaderID)
 		return
 	}
+
+	// Determine if this update is suspicious and needs validation
+	suspicious, reason := isLocationSuspicious(stationId, system, state, eventTime)
+	if suspicious {
+		handleSuspiciousLocation(stationId, system, eventTime, eventType, uploaderID, reason)
+		return
+	}
+
+	// Clear any pending suspicious location since we're applying a valid update
+	delete(suspiciousLocations, stationId)
 
 	_, changed := database.UpdateCarrierLocation(stationId, system, "", eventTime)
 
 	if changed {
-		core.LogInfoF("EDDN: %s - Carrier %s location changed to %s at %s", eventType, stationId, system, eventTimeStr)
+		core.LogInfoF("EDDN: %s - Carrier %s location changed to %s at %s [%s]", eventType, stationId, system, eventTimeStr, uploaderID)
 		PostCarrierFlightLog(stationId, []string{"location: " + system})
 	} else {
-		core.LogDebugF("EDDN: %s - Carrier %s location confirmed at %s (%s)", eventType, stationId, system, eventTimeStr)
+		core.LogDebugF("EDDN: %s - Carrier %s location confirmed at %s (%s) [%s]", eventType, stationId, system, eventTimeStr, uploaderID)
 	}
+}
+
+// isLocationSuspicious checks if a location update should require validation
+func isLocationSuspicious(stationId, newSystem string, state *database.CarrierState, eventTime int64) (bool, string) {
+	// Check 1: Is the system known in EDSM?
+	coords, err := GetSystemCoords(newSystem)
+	if err != nil || coords == nil {
+		return true, "unknown system"
+	}
+
+	if state == nil || state.CurrentSystem == nil {
+		return false, "" // First location, accept it
+	}
+
+	currentSystem := *state.CurrentSystem
+	if currentSystem == "" || currentSystem == "Unknown" {
+		return false, "" // No previous location, accept it
+	}
+
+	// If new system matches current system, this is just a confirmation, not suspicious
+	if strings.EqualFold(newSystem, currentSystem) {
+		return false, ""
+	}
+
+	// From here on, the location is actually changing
+
+	// Check 2: Is the distance reasonable? (< 500ly)
+	currentCoords, err := GetSystemCoords(currentSystem)
+	if err == nil && currentCoords != nil {
+		dist := CalculateDistance(currentCoords, coords)
+		if dist > suspiciousDistanceThreshold {
+			return true, "distance too far (" + formatDistance(dist) + " ly)"
+		}
+	}
+
+	// Check 3: Has enough time passed since last location change? (20 min cooldown)
+	if state.LocationChanged != nil {
+		timeSinceChange := eventTime - *state.LocationChanged
+		if timeSinceChange < carrierJumpCooldown {
+			return true, "too soon since last jump (" + formatDuration(timeSinceChange) + ")"
+		}
+	}
+
+	return false, ""
+}
+
+// handleSuspiciousLocation tracks suspicious location and applies if validated
+func handleSuspiciousLocation(stationId, system string, eventTime int64, eventType, uploaderID, reason string) {
+	now := time.Now().Unix()
+
+	pending := suspiciousLocations[stationId]
+	if pending != nil && pending.System == system {
+		// Same location reported again - count as validation
+		pending.Validations++
+		core.LogDebugF("EDDN: Suspicious %s for %s -> %s validated (%d/2) [%s] reason: %s",
+			eventType, stationId, system, pending.Validations, uploaderID, reason)
+
+		if pending.Validations >= 2 {
+			// Enough validations, apply the update
+			core.LogInfoF("EDDN: %s - Carrier %s location validated and changed to %s [%s]", eventType, stationId, system, uploaderID)
+			database.UpdateCarrierLocation(stationId, system, "", eventTime)
+			PostCarrierFlightLog(stationId, []string{"location: " + system + " (validated)"})
+			delete(suspiciousLocations, stationId)
+		}
+		return
+	}
+
+	// New suspicious location or different system - start tracking
+	suspiciousLocations[stationId] = &suspiciousLocation{
+		System:      system,
+		EventTime:   eventTime,
+		FirstSeen:   now,
+		Validations: 1,
+	}
+	core.LogWarnF("EDDN: Suspicious %s for %s -> %s, needs validation (1/2) [%s] reason: %s",
+		eventType, stationId, system, uploaderID, reason)
+}
+
+func formatDistance(d float64) string {
+	return fmt.Sprintf("%.1f", d)
+}
+
+func formatDuration(seconds int64) string {
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	return fmt.Sprintf("%dm", seconds/60)
 }
 
 func updateCarrierPendingJump(stationId, destSystem, departureTime string) {

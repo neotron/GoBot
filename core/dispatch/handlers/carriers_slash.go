@@ -131,23 +131,23 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 func RegisterAllSlashCommands(s *discordgo.Session) {
 	guildId := core.Settings.SlashCommandGuildId()
 
+	// Only register to a specific guild, not globally
+	if guildId == "" {
+		core.LogInfo("slashCommandGuildId not set, skipping slash command registration")
+		return
+	}
+
 	// Combine all slash commands
 	allCommands := append(carrierSlashCommands, GetEliteDangerousSlashCommands()...)
 
 	// Use bulk overwrite for efficiency (single API call instead of one per command)
-	// If guildId is empty, registers globally (can take up to 1hr to propagate)
-	// If guildId is set, registers to that guild only (instant)
 	registered, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, guildId, allCommands)
 	if err != nil {
 		core.LogErrorF("Failed to register slash commands: %s", err)
 		return
 	}
 
-	scope := "globally"
-	if guildId != "" {
-		scope = "to guild " + guildId
-	}
-	core.LogInfoF("Registered %d slash commands %s", len(registered), scope)
+	core.LogInfoF("Registered %d slash commands to guild %s", len(registered), guildId)
 }
 
 // HandleCarrierSlashCommand handles carrier slash command interactions

@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/jcelliott/lumber"
 )
@@ -15,7 +16,7 @@ type CarrierConfig struct {
 }
 
 type jsonData struct {
-	Development            bool
+	LogLevel               string // "TRACE", "DEBUG", "INFO", "WARN", "ERROR" (default: INFO)
 	AuthToken              string
 	CommandPrefix          string
 	Database               string
@@ -49,12 +50,22 @@ func LoadSettings(settingsfile string) {
 	if err != nil {
 		LogFatal("Failed to parse configuration: ", err)
 	}
-	if !Settings.IsDevelopment() {
+
+	// Set log level from config (default to INFO)
+	switch strings.ToUpper(Settings.data.LogLevel) {
+	case "TRACE":
+		SetLogLevel(lumber.TRACE)
+	case "DEBUG":
+		SetLogLevel(lumber.DEBUG)
+	case "WARN":
+		SetLogLevel(lumber.WARN)
+	case "ERROR":
+		SetLogLevel(lumber.ERROR)
+	default:
 		SetLogLevel(lumber.INFO)
-	} else {
-		LogDebug("Loaded config successfully from ", settingsfile)
 	}
 
+	LogDebug("Loaded config successfully from ", settingsfile)
 }
 
 // Get location of resources
@@ -69,11 +80,6 @@ func (s *SettingsStorage) AuthToken() string {
 // Get the prefix used for bot commands
 func (s *SettingsStorage) CommandPrefix() string {
 	return s.data.CommandPrefix
-}
-
-// Get whether or not we're running in Development mode.
-func (s *SettingsStorage) IsDevelopment() bool {
-	return s.data.Development
 }
 
 // Directory database is stored in

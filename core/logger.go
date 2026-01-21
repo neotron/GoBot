@@ -20,6 +20,9 @@ func SetLogLevel(lvl int) {
 	log.Level(lvl)
 }
 
+func IsLogTrace() bool {
+	return log.IsTrace()
+}
 func IsLogInfo() bool {
 	return log.IsInfo()
 }
@@ -31,6 +34,12 @@ func IsLogWarn() bool {
 }
 func IsLogError() bool {
 	return log.IsError()
+}
+
+func LogTraceF(format string, v ...interface{}) {
+	if log.IsTrace() {
+		doLogF(log.Trace, format, v...)
+	}
 }
 
 func LogDebugF(format string, v ...interface{}) {
@@ -60,6 +69,12 @@ func LogErrorF(format string, v ...interface{}) {
 func LogFatalF(format string, v ...interface{}) {
 	doLogF(log.Fatal, format, v...)
 	os.Exit(2)
+}
+
+func LogTrace(v ...interface{}) {
+	if log.IsTrace() {
+		doLog(log.Trace, v...)
+	}
 }
 
 func LogDebug(v ...interface{}) {
