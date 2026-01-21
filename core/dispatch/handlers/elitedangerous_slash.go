@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"GoBot/core"
-
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -32,17 +30,9 @@ var eliteDangerousSlashCommands = []*discordgo.ApplicationCommand{
 	},
 }
 
-// RegisterEliteDangerousSlashCommands registers Elite Dangerous slash commands
-func RegisterEliteDangerousSlashCommands(s *discordgo.Session) {
-	guildId := core.Settings.SlashCommandGuildId()
-
-	registered, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, guildId, eliteDangerousSlashCommands)
-	if err != nil {
-		core.LogErrorF("Failed to register E:D slash commands: %s", err)
-		return
-	}
-
-	core.LogInfoF("Registered %d E:D slash commands", len(registered))
+// GetEliteDangerousSlashCommands returns the E:D slash commands for combined registration
+func GetEliteDangerousSlashCommands() []*discordgo.ApplicationCommand {
+	return eliteDangerousSlashCommands
 }
 
 // HandleEliteDangerousSlashCommand handles Elite Dangerous slash command interactions

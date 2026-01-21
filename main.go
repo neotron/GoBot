@@ -65,8 +65,7 @@ func main() {
 	services.ProcessCarrierUpdateChannelOnStartup(dg)
 
 	// Register slash commands after connection is open
-	handlers.RegisterCarrierSlashCommands(dg)
-	handlers.RegisterEliteDangerousSlashCommands(dg)
+	handlers.RegisterAllSlashCommands(dg)
 
 	// Wait here until CTRL-C or other term signal is received.
 	core.LogInfoF("Bot is now running.  Press CTRL-C to exit.")
