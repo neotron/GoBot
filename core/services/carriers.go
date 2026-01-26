@@ -175,6 +175,9 @@ func FormatCarrierList() string {
 
 // PostCarrierFlightLog posts a carrier update to the flight log channel
 func PostCarrierFlightLog(stationId string, changes []string) {
+	if core.Settings.DisableFlightLogs() {
+		return
+	}
 	channelId := core.Settings.CarrierFlightLogChannelId()
 	if channelId == "" || discordSession == nil {
 		return

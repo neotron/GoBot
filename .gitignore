@@ -174,3 +174,7 @@ Temporary Items
 # Git worktrees
 .worktrees/
 /GoBot
+/gobot
+/.idea/GrepConsole.xml
+*.sql
+/source.db

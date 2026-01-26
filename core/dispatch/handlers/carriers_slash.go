@@ -125,6 +125,37 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
+	{
+		Name:                     "followers",
+		Description:              "List carriers following our fleet",
+		DefaultMemberPermissions: &permissionAdministrator,
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "sort",
+				Description: "Sort by field",
+				Required:    false,
+				Choices: []*discordgo.ApplicationCommandOptionChoice{
+					{Name: "Most Recent", Value: "recent"},
+					{Name: "Most Sightings", Value: "times"},
+					{Name: "Closest Distance", Value: "distance"},
+				},
+			},
+		},
+	},
+	{
+		Name:                     "carrierinfo",
+		Description:              "Get detailed info about a carrier",
+		DefaultMemberPermissions: &permissionAdministrator,
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "carrier",
+				Description: "Carrier station ID (e.g., ABC-123)",
+				Required:    true,
+			},
+		},
+	},
 }
 
 // RegisterAllSlashCommands registers all slash commands with Discord
@@ -139,6 +170,23 @@ func RegisterAllSlashCommands(s *discordgo.Session) {
 
 	// Combine all slash commands
 	allCommands := append(carrierSlashCommands, GetEliteDangerousSlashCommands()...)
+
+	// Filter commands if allowlist is configured
+	allowlist := core.Settings.SlashCommandAllowlist()
+	if len(allowlist) > 0 {
+		allowlistMap := make(map[string]bool)
+		for _, name := range allowlist {
+			allowlistMap[name] = true
+		}
+		filtered := make([]*discordgo.ApplicationCommand, 0)
+		for _, cmd := range allCommands {
+			if allowlistMap[cmd.Name] {
+				filtered = append(filtered, cmd)
+			}
+		}
+		core.LogInfoF("Slash command allowlist active: %v (registering %d of %d commands)", allowlist, len(filtered), len(allCommands))
+		allCommands = filtered
+	}
 
 	// Use bulk overwrite for efficiency (single API call instead of one per command)
 	registered, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, guildId, allCommands)
@@ -260,6 +308,29 @@ func handleCarrierSlashAppCommand(s *discordgo.Session, i *discordgo.Interaction
 		}
 		respond(s, i, formatLocationResponse(stationId, system), true)
 		services.PostCarrierFlightLog(stationId, []string{"location: " + system})
+
+	case "followers":
+		if !canManageCarriersSlash(userID, i.ChannelID) {
+			respond(s, i, "You don't have permission to view followers.", true)
+			return
+		}
+		sortBy := "recent" // default
+		if len(data.Options) > 0 {
+			sortBy = data.Options[0].StringValue()
+		}
+		followers := services.GetRecentFollowers(sortBy)
+		output := services.FormatFollowerList(followers, sortBy)
+		respond(s, i, output, true)
+
+	case "carrierinfo":
+		if !canManageCarriersSlash(userID, i.ChannelID) {
+			respond(s, i, "You don't have permission to view carrier info.", true)
+			return
+		}
+		stationId := strings.ToUpper(data.Options[0].StringValue())
+		follower := services.GetFollowerInfo(stationId)
+		output := services.FormatFollowerInfo(follower)
+		respond(s, i, output, true)
 	}
 }
 

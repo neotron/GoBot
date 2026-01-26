@@ -2,6 +2,8 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
+	"time"
 
 	"GoBot/core"
 )
@@ -33,6 +35,33 @@ CREATE TABLE IF NOT EXISTS carrier_state (
 );
 `
 
+const followerSchema = `
+CREATE TABLE IF NOT EXISTS carrier_followers (
+	follower_station_id TEXT PRIMARY KEY,
+	last_near_carrier TEXT NOT NULL,
+	last_system TEXT NOT NULL,
+	last_distance REAL NOT NULL,
+	total_distance REAL NOT NULL DEFAULT 0,
+	times_seen INTEGER NOT NULL DEFAULT 1,
+	last_seen INTEGER NOT NULL,
+	first_seen INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_followers_last_seen ON carrier_followers(last_seen);
+CREATE INDEX IF NOT EXISTS idx_followers_times_seen ON carrier_followers(times_seen);
+`
+
+// CarrierFollower represents a carrier that has been seen near our carriers
+type CarrierFollower struct {
+	FollowerStationId string  `db:"follower_station_id"`
+	LastNearCarrier   string  `db:"last_near_carrier"`
+	LastSystem        string  `db:"last_system"`
+	LastDistance      float64 `db:"last_distance"`
+	TotalDistance     float64 `db:"total_distance"`
+	TimesSeen         int     `db:"times_seen"`
+	LastSeen          int64   `db:"last_seen"`
+	FirstSeen         int64   `db:"first_seen"`
+}
+
 // InitializeCarrierTable creates the carrier_state table if it doesn't exist
 func InitializeCarrierTable() {
 	if database == nil {
@@ -46,6 +75,11 @@ func InitializeCarrierTable() {
 	_, _ = database.Exec("ALTER TABLE carrier_state ADD COLUMN location_changed INTEGER")
 	_, _ = database.Exec("ALTER TABLE carrier_state ADD COLUMN pending_jump_dest TEXT")
 	_, _ = database.Exec("ALTER TABLE carrier_state ADD COLUMN pending_jump_time INTEGER")
+
+	_, err := database.Exec(followerSchema)
+	if err != nil {
+		core.LogErrorF("Failed to create carrier_followers table: %s", err)
+	}
 }
 
 // FetchCarrierState gets the current state for a carrier
@@ -161,4 +195,114 @@ func UpdateCarrierPendingJump(stationId string, dest *string, jumpTime *int64) b
 // ClearCarrierPendingJump clears the pending jump (after jump completes or is cancelled)
 func ClearCarrierPendingJump(stationId string) bool {
 	return UpdateCarrierPendingJump(stationId, nil, nil)
+}
+
+// FetchCarrierFollower retrieves a single follower by station ID
+func FetchCarrierFollower(stationId string) *CarrierFollower {
+	if database == nil {
+		return nil
+	}
+	var follower CarrierFollower
+	err := database.Get(&follower, "SELECT * FROM carrier_followers WHERE follower_station_id = $1", stationId)
+	switch err {
+	case sql.ErrNoRows:
+		return nil
+	case nil:
+		return &follower
+	default:
+		core.LogErrorF("Failed to fetch carrier follower %s: %s", stationId, err)
+		return nil
+	}
+}
+
+// UpsertCarrierFollower inserts or updates a follower record
+// Returns true if this was a new sighting (location changed), false if just an update
+func UpsertCarrierFollower(followerStationId, nearCarrier, system string, distance float64, eventTime int64) bool {
+	if database == nil {
+		return false
+	}
+	// Check if follower exists and if location changed
+	existing := FetchCarrierFollower(followerStationId)
+
+	if existing == nil {
+		// New follower
+		_, err := database.Exec(`
+			INSERT INTO carrier_followers
+			(follower_station_id, last_near_carrier, last_system, last_distance, total_distance, times_seen, last_seen, first_seen)
+			VALUES ($1, $2, $3, $4, $5, 1, $6, $6)`,
+			followerStationId, nearCarrier, system, distance, distance, eventTime)
+		if err != nil {
+			core.LogErrorF("Failed to insert carrier follower: %s", err)
+			return false
+		}
+		return true
+	}
+
+	// Check if location actually changed (different system)
+	locationChanged := existing.LastSystem != system
+
+	if locationChanged {
+		// Update with new sighting - increment times_seen and add to total_distance
+		_, err := database.Exec(`
+			UPDATE carrier_followers SET
+				last_near_carrier = $2,
+				last_system = $3,
+				last_distance = $4,
+				total_distance = total_distance + $4,
+				times_seen = times_seen + 1,
+				last_seen = $5
+			WHERE follower_station_id = $1`,
+			followerStationId, nearCarrier, system, distance, eventTime)
+		if err != nil {
+			core.LogErrorF("Failed to update carrier follower: %s", err)
+			return false
+		}
+		return true
+	}
+
+	// Same location - just update timestamp and distance (don't increment times_seen)
+	_, err := database.Exec(`
+		UPDATE carrier_followers SET
+			last_near_carrier = $2,
+			last_distance = $3,
+			last_seen = $4
+		WHERE follower_station_id = $1`,
+		followerStationId, nearCarrier, distance, eventTime)
+	if err != nil {
+		core.LogErrorF("Failed to update carrier follower timestamp: %s", err)
+	}
+	return false
+}
+
+// FetchRecentFollowers retrieves followers seen in the last N days with more than minSightings
+// sortBy can be: "distance", "times", "recent"
+func FetchRecentFollowers(days int, minSightings int, sortBy string) []CarrierFollower {
+	if database == nil {
+		return nil
+	}
+	cutoff := time.Now().Unix() - int64(days*24*60*60)
+
+	orderClause := "last_seen DESC" // default: recent
+	switch sortBy {
+	case "distance":
+		orderClause = "last_distance ASC"
+	case "times":
+		orderClause = "times_seen DESC"
+	case "recent":
+		orderClause = "last_seen DESC"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT * FROM carrier_followers
+		WHERE last_seen >= $1 AND times_seen > $2
+		ORDER BY %s
+		LIMIT 25`, orderClause)
+
+	var followers []CarrierFollower
+	err := database.Select(&followers, query, cutoff, minSightings)
+	if err != nil {
+		core.LogErrorF("Failed to fetch recent followers: %s", err)
+		return nil
+	}
+	return followers
 }

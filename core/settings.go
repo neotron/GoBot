@@ -28,7 +28,10 @@ type jsonData struct {
 	Carriers               []CarrierConfig // Fleet carrier definitions
 	SlashCommandGuildId      string          // Guild ID for slash commands (empty = global, can take 1hr to propagate)
 	CarrierUpdateChannelId   string          // Channel ID to watch for carrier status updates
-	CarrierFlightLogChannelId string         // Channel ID to post carrier change logs
+	CarrierFlightLogChannelId    string  // Channel ID to post carrier change logs
+	FollowerDistanceThreshold float64 // Distance in ly to consider a carrier "following" (default 100)
+	DisableFlightLogs     bool     // When true, don't post carrier updates to Discord
+	SlashCommandAllowlist []string // When non-empty, only register these slash commands
 }
 
 type SettingsStorage struct {
@@ -63,6 +66,13 @@ func LoadSettings(settingsfile string) {
 		SetLogLevel(lumber.ERROR)
 	default:
 		SetLogLevel(lumber.INFO)
+	}
+
+	if Settings.data.DisableFlightLogs {
+		LogInfo("Flight logs disabled (disableFlightLogs=true)")
+	}
+	if len(Settings.data.SlashCommandAllowlist) > 0 {
+		LogInfoF("Slash command allowlist configured: %v", Settings.data.SlashCommandAllowlist)
 	}
 
 	LogDebug("Loaded config successfully from ", settingsfile)
@@ -150,4 +160,22 @@ func (s *SettingsStorage) CarrierUpdateChannelId() string {
 // CarrierFlightLogChannelId returns the channel ID for carrier change logs
 func (s *SettingsStorage) CarrierFlightLogChannelId() string {
 	return s.data.CarrierFlightLogChannelId
+}
+
+// FollowerDistanceThreshold returns the distance threshold for follower detection (default 100 ly)
+func (s *SettingsStorage) FollowerDistanceThreshold() float64 {
+	if s.data.FollowerDistanceThreshold <= 0 {
+		return 100.0 // default
+	}
+	return s.data.FollowerDistanceThreshold
+}
+
+// DisableFlightLogs returns whether flight log posting is disabled
+func (s *SettingsStorage) DisableFlightLogs() bool {
+	return s.data.DisableFlightLogs
+}
+
+// SlashCommandAllowlist returns the list of allowed slash commands (empty = all allowed)
+func (s *SettingsStorage) SlashCommandAllowlist() []string {
+	return s.data.SlashCommandAllowlist
 }

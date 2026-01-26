@@ -205,6 +205,20 @@ func processJournalMessage(raw json.RawMessage, uploaderID string) {
 			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
 		}
 	}
+
+	// Check for follower carriers in Location/FSDJump/Docked events
+	if (msg.Event == "Location" || msg.Event == "FSDJump" || msg.Event == "Docked") &&
+		msg.StationName != "" && isCarrierCallsign(msg.StationName) && !isOurCarrier(msg.StationName) {
+		var eventTime int64
+		if t, err := time.Parse(time.RFC3339, msg.Timestamp); err == nil {
+			eventTime = t.Unix()
+		} else if t, err := time.Parse("2006-01-02T15:04:05Z", msg.Timestamp); err == nil {
+			eventTime = t.Unix()
+		} else {
+			eventTime = time.Now().Unix()
+		}
+		checkAndRecordFollower(msg.StationName, msg.StarSystem, eventTime)
+	}
 }
 
 func processFSCarrierState(raw json.RawMessage, uploaderID string) {
@@ -411,4 +425,57 @@ func isCarrierCallsign(s string) bool {
 		}
 	}
 	return true
+}
+
+// isOurCarrier checks if a station ID is one of our configured carriers
+func isOurCarrier(stationId string) bool {
+	return carrierCallsigns[stationId]
+}
+
+// checkAndRecordFollower checks if an external carrier is near any of our carriers
+func checkAndRecordFollower(followerStationId, system string, eventTime int64) {
+	// Don't track our own carriers as followers
+	if isOurCarrier(followerStationId) {
+		return
+	}
+
+	core.LogTraceF("EDDN: External carrier %s seen at %s", followerStationId, system)
+
+	threshold := core.Settings.FollowerDistanceThreshold()
+
+	// Get coordinates for the follower's system
+	followerCoords, err := GetSystemCoords(system)
+	if err != nil || followerCoords == nil {
+		core.LogTraceF("EDDN: External carrier %s - cannot get coords for %s", followerStationId, system)
+		return // Unknown system, skip
+	}
+
+	// Check distance to each of our carriers
+	for stationId := range carrierCallsigns {
+		state := database.FetchCarrierState(stationId)
+		if state == nil || state.CurrentSystem == nil || *state.CurrentSystem == "" {
+			continue
+		}
+
+		ourCoords, err := GetSystemCoords(*state.CurrentSystem)
+		if err != nil || ourCoords == nil {
+			continue
+		}
+
+		distance := CalculateDistance(followerCoords, ourCoords)
+		if distance >= 0 && distance <= threshold {
+			// Within threshold - record as follower
+			isNew := database.UpsertCarrierFollower(followerStationId, stationId, system, distance, eventTime)
+			if isNew {
+				core.LogDebugF("EDDN: Follower %s detected near %s at %s (%.1f ly)",
+					followerStationId, stationId, system, distance)
+			} else {
+				core.LogTraceF("EDDN: Follower %s updated near %s at %s (%.1f ly, same location)",
+					followerStationId, stationId, system, distance)
+			}
+			return // Only record once per event (nearest carrier)
+		}
+		core.LogTraceF("EDDN: External carrier %s at %s is %.1f ly from %s (threshold: %.0f)",
+			followerStationId, system, distance, stationId, threshold)
+	}
 }
