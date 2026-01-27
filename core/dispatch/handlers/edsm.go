@@ -257,10 +257,15 @@ func handleDistance(s []string, m *dispatch.Message) {
 		return
 	}
 
-	// Special handling: find closest carrier
-	dest := strings.ToLower(s[1])
-	if dest == "carrier" || dest == "carriers" {
+	// Special handling: find closest carrier (keyword can be on either side)
+	lhs := strings.ToLower(s[0])
+	rhs := strings.ToLower(s[1])
+	if rhs == "carrier" || rhs == "carriers" {
 		handleClosestCarrier(s[0], m)
+		return
+	}
+	if lhs == "carrier" || lhs == "carriers" {
+		handleClosestCarrier(s[1], m)
 		return
 	}
 	var systemCoords []SystemModel
