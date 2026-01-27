@@ -226,7 +226,6 @@ func UpsertCarrierFollower(followerStationId, nearCarrier, system string, distan
 
 	if existing == nil {
 		// New follower
-		core.LogDebugF("DB: Inserting new follower %s at %s", followerStationId, system)
 		_, err := database.Exec(`
 			INSERT INTO carrier_followers
 			(follower_station_id, last_near_carrier, last_system, last_distance, total_distance, times_seen, last_seen, first_seen)
@@ -241,11 +240,9 @@ func UpsertCarrierFollower(followerStationId, nearCarrier, system string, distan
 
 	// Check if location actually changed (different system)
 	locationChanged := existing.LastSystem != system
-	core.LogDebugF("DB: Follower %s exists at %s, new system %s, changed=%v", followerStationId, existing.LastSystem, system, locationChanged)
 
 	if locationChanged {
 		// Update with new sighting - increment times_seen and add to total_distance
-		core.LogDebugF("DB: Updating follower %s times_seen from %d", followerStationId, existing.TimesSeen)
 		_, err := database.Exec(`
 			UPDATE carrier_followers SET
 				last_near_carrier = ?,

@@ -14,9 +14,9 @@ const (
 	inaraSearchURL       = "https://inara.cz/elite/search/?search=%s"
 )
 
-// formatCarrierLink formats a carrier ID as an Inara search link
+// formatCarrierLink formats a carrier ID as an Inara search link (no embed)
 func formatCarrierLink(stationId string) string {
-	return fmt.Sprintf("[%s]("+inaraSearchURL+")", stationId, stationId)
+	return fmt.Sprintf("[%s](<"+inaraSearchURL+">)", stationId, stationId)
 }
 
 // GetRecentFollowers returns formatted list of followers for display
