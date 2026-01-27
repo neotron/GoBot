@@ -32,6 +32,7 @@ type jsonData struct {
 	FollowerDistanceThreshold float64 // Distance in ly to consider a carrier "following" (default 100)
 	DisableFlightLogs     bool     // When true, don't post carrier updates to Discord
 	SlashCommandAllowlist []string // When non-empty, only register these slash commands
+	CarrierValidation     []string // Validation modes: "range" (distance check), "time" (cooldown check). Empty = no validation
 }
 
 type SettingsStorage struct {
@@ -73,6 +74,9 @@ func LoadSettings(settingsfile string) {
 	}
 	if len(Settings.data.SlashCommandAllowlist) > 0 {
 		LogInfoF("Slash command allowlist configured: %v", Settings.data.SlashCommandAllowlist)
+	}
+	if len(Settings.data.CarrierValidation) > 0 {
+		LogInfoF("Carrier validation enabled: %v", Settings.data.CarrierValidation)
 	}
 
 	LogDebug("Loaded config successfully from ", settingsfile)
@@ -178,4 +182,15 @@ func (s *SettingsStorage) DisableFlightLogs() bool {
 // SlashCommandAllowlist returns the list of allowed slash commands (empty = all allowed)
 func (s *SettingsStorage) SlashCommandAllowlist() []string {
 	return s.data.SlashCommandAllowlist
+}
+
+// CarrierValidationEnabled checks if a specific validation mode is enabled
+// Valid modes: "range" (distance check), "time" (cooldown check)
+func (s *SettingsStorage) CarrierValidationEnabled(mode string) bool {
+	for _, v := range s.data.CarrierValidation {
+		if strings.EqualFold(v, mode) {
+			return true
+		}
+	}
+	return false
 }

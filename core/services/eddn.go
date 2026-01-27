@@ -295,7 +295,7 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 
 // isLocationSuspicious checks if a location update should require validation
 func isLocationSuspicious(stationId, newSystem string, state *database.CarrierState, eventTime int64) (bool, string) {
-	// Check 1: Is the system known in EDSM?
+	// Check 1: Is the system known in EDSM? (always checked)
 	coords, err := GetSystemCoords(newSystem)
 	if err != nil || coords == nil {
 		return true, "unknown system"
@@ -317,20 +317,24 @@ func isLocationSuspicious(stationId, newSystem string, state *database.CarrierSt
 
 	// From here on, the location is actually changing
 
-	// Check 2: Is the distance reasonable? (< 500ly)
-	currentCoords, err := GetSystemCoords(currentSystem)
-	if err == nil && currentCoords != nil {
-		dist := CalculateDistance(currentCoords, coords)
-		if dist > suspiciousDistanceThreshold {
-			return true, "distance too far (" + formatDistance(dist) + " ly)"
+	// Check 2: Is the distance reasonable? (< 500ly) - only if "range" validation enabled
+	if core.Settings.CarrierValidationEnabled("range") {
+		currentCoords, err := GetSystemCoords(currentSystem)
+		if err == nil && currentCoords != nil {
+			dist := CalculateDistance(currentCoords, coords)
+			if dist > suspiciousDistanceThreshold {
+				return true, "distance too far (" + formatDistance(dist) + " ly)"
+			}
 		}
 	}
 
-	// Check 3: Has enough time passed since last location change? (20 min cooldown)
-	if state.LocationChanged != nil {
-		timeSinceChange := eventTime - *state.LocationChanged
-		if timeSinceChange < carrierJumpCooldown {
-			return true, "too soon since last jump (" + formatDuration(timeSinceChange) + ")"
+	// Check 3: Has enough time passed since last location change? (20 min cooldown) - only if "time" validation enabled
+	if core.Settings.CarrierValidationEnabled("time") {
+		if state.LocationChanged != nil {
+			timeSinceChange := eventTime - *state.LocationChanged
+			if timeSinceChange < carrierJumpCooldown {
+				return true, "too soon since last jump (" + formatDuration(timeSinceChange) + ")"
+			}
 		}
 	}
 
