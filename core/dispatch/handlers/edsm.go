@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"GoBot/core"
+	"GoBot/core/database"
 	"GoBot/core/dispatch"
 	"github.com/thoas/go-funk"
 )
@@ -45,8 +46,8 @@ func init() {
 		[]dispatch.MessageCommand{
 			{"loc", "Try to get a commanders location from EDSM. Syntax: loc <commander name>"},
 			{"dist", fmt.Sprint("Calculate distance between two systems. Syntax: dist <system> -> <system> ",
-				"(i.e: `dist Sol -> Sagittarius A*`). Instead of a system, you can also use a commander name or ",
-				"a location consisting of three X Y Z coordinates, for example: `dist NeoTron -> 0 0 0`.")},
+				"(i.e: `dist Sol -> Sagittarius A*`). Supports system names, commander names, carrier names/callsigns, ",
+				"or X Y Z coordinates. Use `carrier` as destination to find closest carrier: `dist NeoTron -> carrier`.")},
 		}, nil, false)
 }
 
@@ -117,6 +118,135 @@ func (*edsm) CommandGroup() string {
 	return "EDSM Queries"
 }
 
+// getCarrierSystem checks if the input matches a carrier name or callsign and returns its current system
+// Returns (systemName, carrierDisplayName, found)
+func getCarrierSystem(input string) (string, string, bool) {
+	inputLower := strings.ToLower(input)
+	inputUpper := strings.ToUpper(input)
+
+	// Check configured carriers by name or callsign
+	for _, carrier := range core.Settings.Carriers() {
+		if strings.ToLower(carrier.Name) == inputLower || carrier.StationId == inputUpper {
+			state := database.FetchCarrierState(carrier.StationId)
+			if state != nil && state.CurrentSystem != nil && *state.CurrentSystem != "" {
+				return *state.CurrentSystem, fmt.Sprintf("Carrier %s (%s)", carrier.Name, carrier.StationId), true
+			}
+			return "", "", false // Carrier found but no known location
+		}
+	}
+
+	// Check if it looks like a carrier callsign (XXX-XXX) - could be a follower
+	if len(input) == 7 && input[3] == '-' {
+		state := database.FetchCarrierState(inputUpper)
+		if state != nil && state.CurrentSystem != nil && *state.CurrentSystem != "" {
+			return *state.CurrentSystem, fmt.Sprintf("Carrier %s", inputUpper), true
+		}
+		// Also check followers table
+		follower := database.FetchCarrierFollower(inputUpper)
+		if follower != nil {
+			return follower.LastSystem, fmt.Sprintf("Carrier %s", inputUpper), true
+		}
+	}
+
+	return "", "", false
+}
+
+// handleClosestCarrier finds the closest carrier to the given location
+func handleClosestCarrier(location string, m *dispatch.Message) {
+	// Resolve location to coordinates
+	var coords *CoordModel
+	var locationName string
+
+	// Check if it's raw coordinates
+	parts := strings.Split(location, " ")
+	if len(parts) == 3 {
+		x, errX := strconv.ParseFloat(parts[0], 64)
+		y, errY := strconv.ParseFloat(parts[1], 64)
+		z, errZ := strconv.ParseFloat(parts[2], 64)
+		if errX == nil && errY == nil && errZ == nil {
+			coords = &CoordModel{x, y, z}
+			locationName = fmt.Sprintf("`(x: %.1f, y: %.1f, z: %.1f)`", x, y, z)
+		}
+	}
+
+	// Check if it's a carrier
+	if coords == nil {
+		if carrierSystem, carrierName, found := getCarrierSystem(location); found {
+			sys := getSystemCoords(carrierSystem, m)
+			if sys != nil && sys.Coords != nil {
+				coords = sys.Coords
+				locationName = fmt.Sprintf("%s `(in %s)`", carrierName, carrierSystem)
+			}
+		}
+	}
+
+	// Check if it's a system name
+	if coords == nil {
+		sys := getSystemCoords(location, m)
+		if sys != nil && sys.Coords != nil {
+			coords = sys.Coords
+			locationName = sys.Name
+		}
+	}
+
+	// Check if it's a commander
+	if coords == nil {
+		cmdr := fetchCommanderLocation(location, m)
+		if cmdr != nil && len(cmdr.System) > 0 {
+			sys := getSystemCoords(cmdr.System, m)
+			if sys != nil && sys.Coords != nil {
+				coords = sys.Coords
+				locationName = fmt.Sprintf("Cmdr %s `(in %s)`", location, cmdr.System)
+			}
+		}
+	}
+
+	if coords == nil {
+		m.ReplyToChannel("Could not find coordinates for %s.", location)
+		return
+	}
+
+	name, callsign, system, dist, found := findClosestCarrier(coords, m)
+	if !found {
+		m.ReplyToChannel("No carriers with known locations found.")
+		return
+	}
+
+	m.ReplyToChannel("The closest carrier to %s is **%s** (%s) in %s at **%.2f ly**.", locationName, name, callsign, system, dist)
+}
+
+// findClosestCarrier finds the closest configured carrier to the given coordinates
+// Returns (carrierName, callsign, system, distance, found)
+func findClosestCarrier(coords *CoordModel, m *dispatch.Message) (string, string, string, float64, bool) {
+	var closestName, closestCallsign, closestSystem string
+	closestDist := math.MaxFloat64
+
+	for _, carrier := range core.Settings.Carriers() {
+		state := database.FetchCarrierState(carrier.StationId)
+		if state == nil || state.CurrentSystem == nil || *state.CurrentSystem == "" {
+			continue
+		}
+
+		sys := getSystemCoords(*state.CurrentSystem, m)
+		if sys == nil || sys.Coords == nil {
+			continue
+		}
+
+		dist := calcDistance(coords, sys.Coords)
+		if dist < closestDist {
+			closestDist = dist
+			closestName = carrier.Name
+			closestCallsign = carrier.StationId
+			closestSystem = *state.CurrentSystem
+		}
+	}
+
+	if closestName != "" {
+		return closestName, closestCallsign, closestSystem, closestDist, true
+	}
+	return "", "", "", 0, false
+}
+
 func handleDistance(s []string, m *dispatch.Message) {
 	var aliases = map[string]string{
 		"jaques":         "Colonia",
@@ -124,6 +254,13 @@ func handleDistance(s []string, m *dispatch.Message) {
 	}
 	if len(s) != 2 {
 		m.ReplyToChannel("Invalid syntax. Expected: '%sdist System Name -> System 2 Name`", core.Settings.CommandPrefix())
+		return
+	}
+
+	// Special handling: find closest carrier
+	dest := strings.ToLower(s[1])
+	if dest == "carrier" || dest == "carriers" {
+		handleClosestCarrier(s[0], m)
 		return
 	}
 	var systemCoords []SystemModel
@@ -176,6 +313,16 @@ func handleDistance(s []string, m *dispatch.Message) {
 				waypointName = "Waypoint \(wp) (\(systemName))"
 			*/
 			//			}
+		}
+
+		// Check if it's a carrier name or callsign
+		if carrierSystem, carrierName, found := getCarrierSystem(systemName); found {
+			sys := getSystemCoords(carrierSystem, m)
+			if sys != nil {
+				sys.Name = fmt.Sprintf("%s `(in %s)`", carrierName, carrierSystem)
+				calcDist(*sys)
+				continue
+			}
 		}
 
 		// Look up system coordinates by name
@@ -242,6 +389,15 @@ func reportNotTrilaterated(systemName string, m *dispatch.Message) {
 	m.ReplyToChannel("%s has not been trilaterated.", systemName)
 }
 
+// calcDistance calculates distance between two coordinate sets
+func calcDistance(c1, c2 *CoordModel) float64 {
+	sq2 := func(a, b float64) float64 {
+		val := a - b
+		return math.Pow(val, 2)
+	}
+	return math.Sqrt(sq2(c1.X, c2.X) + sq2(c1.Y, c2.Y) + sq2(c1.Z, c2.Z))
+}
+
 func calculateDistance(s []SystemModel, m *dispatch.Message) {
 	c1 := s[0].Coords
 	c2 := s[1].Coords
@@ -250,11 +406,6 @@ func calculateDistance(s []SystemModel, m *dispatch.Message) {
 		return
 	}
 
-	sq2 := func(a, b float64) float64 {
-		val := a - b
-		return math.Pow(val, 2)
-	}
-
-	dist := math.Sqrt(sq2(c1.X, c2.X) + sq2(c1.Y, c2.Y) + sq2(c1.Z, c2.Z))
+	dist := calcDistance(c1, c2)
 	m.ReplyToChannel("Distance between %s and %s is %.2f ly", s[0].Name, s[1].Name, dist)
 }
