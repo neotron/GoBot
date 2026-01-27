@@ -96,7 +96,7 @@ func FetchCommandAlias(cmd string) *CommandAlias {
 		return nil
 	}
 	command := CommandAlias{}
-	err := database.Get(&command, "SELECT * FROM commandalias WHERE command=$1", cmd)
+	err := database.Get(&command, "SELECT * FROM commandalias WHERE command=?", cmd)
 	switch err {
 	default:
 		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
@@ -114,7 +114,7 @@ func HasCommandAlias(cmd string) bool {
 		return false
 	}
 	count := count{}
-	err := database.Get(&count, "SELECT count(*) count FROM commandalias WHERE command=$1", cmd)
+	err := database.Get(&count, "SELECT count(*) count FROM commandalias WHERE command=?", cmd)
 	switch err {
 	default:
 		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
@@ -152,7 +152,7 @@ func executeAndCommit(action executeFunc) (res sql.Result, err error) {
 
 func RemoveCommandAlias(cmd string) bool {
 	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
-		return tx.Exec("DELETE FROM commandalias where command = $1", cmd)
+		return tx.Exec("DELETE FROM commandalias where command = ?", cmd)
 	})
 	switch err {
 	default:
@@ -168,7 +168,7 @@ func RemoveCommandAlias(cmd string) bool {
 
 func CreateCommandAlias(cmd, val string) bool {
 	_, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
-		return tx.Exec("INSERT INTO commandalias (command, value, pmenabled) VALUES ($1, $2, FALSE)", cmd, val)
+		return tx.Exec("INSERT INTO commandalias (command, value, pmenabled) VALUES (?, ?, FALSE)", cmd, val)
 	})
 	if err != nil {
 		core.LogError("Failed to insert command: ", err)
@@ -180,9 +180,9 @@ func CreateCommandAlias(cmd, val string) bool {
 func updateTable(table TableName, whereKey FieldName, whereVal interface{}, field FieldName, val interface{}) bool {
 	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
 		if val == nil {
-			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = NULL WHERE %s = $1", table, field, whereKey), whereVal)
+			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = NULL WHERE %s = ?", table, field, whereKey), whereVal)
 		} else {
-			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = $1 WHERE %s = $2", table, field, whereKey), val, whereVal)
+			return tx.Exec(fmt.Sprintf("UPDATE %s SET %s = ? WHERE %s = ?", table, field, whereKey), val, whereVal)
 		}
 	})
 	if err != nil {
@@ -211,7 +211,7 @@ func HasCommandGroup(cmd string) bool {
 		return false
 	}
 	count := count{}
-	err := database.Get(&count, "SELECT count(*) count FROM commandgroup WHERE command=$1", cmd)
+	err := database.Get(&count, "SELECT count(*) count FROM commandgroup WHERE command=?", cmd)
 	switch err {
 	default:
 		core.LogErrorF("Failed to fetch count %s: %s", cmd, err)
@@ -225,7 +225,7 @@ func HasCommandGroup(cmd string) bool {
 
 func RemoveCommandGroup(cmd string) bool {
 	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
-		return tx.Exec("DELETE FROM commandgroup where command = $1", cmd)
+		return tx.Exec("DELETE FROM commandgroup where command = ?", cmd)
 	})
 	switch err {
 	default:
@@ -245,7 +245,7 @@ func FetchCommandGroup(cmd string) *CommandGroup {
 		return nil
 	}
 	command := CommandGroup{}
-	err := database.Get(&command, "SELECT * FROM commandgroup WHERE command=$1", cmd)
+	err := database.Get(&command, "SELECT * FROM commandgroup WHERE command=?", cmd)
 	switch err {
 	default:
 		core.LogErrorF("Failed to fetch command group %s: %s", cmd, err)
@@ -262,7 +262,7 @@ func FetchOrCreateCommandGroup(cmd string) *CommandGroup {
 		// Try to create a new one
 		command = &CommandGroup{Command: cmd}
 		res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
-			return tx.Exec("INSERT INTO commandgroup (command) VALUES ($1)", cmd)
+			return tx.Exec("INSERT INTO commandgroup (command) VALUES (?)", cmd)
 		})
 		if err != nil {
 			core.LogErrorF("Failed to create new command group %s.", cmd)
@@ -293,7 +293,7 @@ func FetchCommandGroups() []CommandGroup {
 
 func (c *CommandGroup) FetchCommands() []CommandAlias {
 	var commands []CommandAlias
-	err := database.Select(&commands, "SELECT * FROM commandalias WHERE group_id=$1 ORDER BY command ASC", c.Id)
+	err := database.Select(&commands, "SELECT * FROM commandalias WHERE group_id=? ORDER BY command ASC", c.Id)
 	switch err {
 	default:
 		core.LogErrorF("Failed to fetch commands group: %s", err)

@@ -89,7 +89,7 @@ func FetchCarrierState(stationId string) *CarrierState {
 		return nil
 	}
 	state := CarrierState{}
-	err := database.Get(&state, "SELECT * FROM carrier_state WHERE station_id=$1", stationId)
+	err := database.Get(&state, "SELECT * FROM carrier_state WHERE station_id=?", stationId)
 	switch err {
 	case sql.ErrNoRows:
 		return nil
@@ -106,7 +106,7 @@ func UpsertCarrierState(state *CarrierState) bool {
 	_, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
 		return tx.Exec(`
 			INSERT INTO carrier_state (station_id, current_system, system_url, location_updated, location_changed, jump_time, destination, status, pending_jump_dest, pending_jump_time)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(station_id) DO UPDATE SET
 				current_system = excluded.current_system,
 				system_url = excluded.system_url,
@@ -203,7 +203,7 @@ func FetchCarrierFollower(stationId string) *CarrierFollower {
 		return nil
 	}
 	var follower CarrierFollower
-	err := database.Get(&follower, "SELECT * FROM carrier_followers WHERE follower_station_id = $1", stationId)
+	err := database.Get(&follower, "SELECT * FROM carrier_followers WHERE follower_station_id = ?", stationId)
 	switch err {
 	case sql.ErrNoRows:
 		return nil
@@ -226,11 +226,12 @@ func UpsertCarrierFollower(followerStationId, nearCarrier, system string, distan
 
 	if existing == nil {
 		// New follower
+		core.LogDebugF("DB: Inserting new follower %s at %s", followerStationId, system)
 		_, err := database.Exec(`
 			INSERT INTO carrier_followers
 			(follower_station_id, last_near_carrier, last_system, last_distance, total_distance, times_seen, last_seen, first_seen)
-			VALUES ($1, $2, $3, $4, $5, 1, $6, $6)`,
-			followerStationId, nearCarrier, system, distance, distance, eventTime)
+			VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+			followerStationId, nearCarrier, system, distance, distance, eventTime, eventTime)
 		if err != nil {
 			core.LogErrorF("Failed to insert carrier follower: %s", err)
 			return false
@@ -240,19 +241,21 @@ func UpsertCarrierFollower(followerStationId, nearCarrier, system string, distan
 
 	// Check if location actually changed (different system)
 	locationChanged := existing.LastSystem != system
+	core.LogDebugF("DB: Follower %s exists at %s, new system %s, changed=%v", followerStationId, existing.LastSystem, system, locationChanged)
 
 	if locationChanged {
 		// Update with new sighting - increment times_seen and add to total_distance
+		core.LogDebugF("DB: Updating follower %s times_seen from %d", followerStationId, existing.TimesSeen)
 		_, err := database.Exec(`
 			UPDATE carrier_followers SET
-				last_near_carrier = $2,
-				last_system = $3,
-				last_distance = $4,
-				total_distance = total_distance + $4,
+				last_near_carrier = ?,
+				last_system = ?,
+				last_distance = ?,
+				total_distance = total_distance + ?,
 				times_seen = times_seen + 1,
-				last_seen = $5
-			WHERE follower_station_id = $1`,
-			followerStationId, nearCarrier, system, distance, eventTime)
+				last_seen = ?
+			WHERE follower_station_id = ?`,
+			nearCarrier, system, distance, distance, eventTime, followerStationId)
 		if err != nil {
 			core.LogErrorF("Failed to update carrier follower: %s", err)
 			return false
@@ -263,11 +266,11 @@ func UpsertCarrierFollower(followerStationId, nearCarrier, system string, distan
 	// Same location - just update timestamp and distance (don't increment times_seen)
 	_, err := database.Exec(`
 		UPDATE carrier_followers SET
-			last_near_carrier = $2,
-			last_distance = $3,
-			last_seen = $4
-		WHERE follower_station_id = $1`,
-		followerStationId, nearCarrier, distance, eventTime)
+			last_near_carrier = ?,
+			last_distance = ?,
+			last_seen = ?
+		WHERE follower_station_id = ?`,
+		nearCarrier, distance, eventTime, followerStationId)
 	if err != nil {
 		core.LogErrorF("Failed to update carrier follower timestamp: %s", err)
 	}
@@ -294,7 +297,7 @@ func FetchRecentFollowers(days int, minSightings int, sortBy string) []CarrierFo
 
 	query := fmt.Sprintf(`
 		SELECT * FROM carrier_followers
-		WHERE last_seen >= $1 AND times_seen > $2
+		WHERE last_seen >= ? AND times_seen > ?
 		ORDER BY %s
 		LIMIT 25`, orderClause)
 
