@@ -261,7 +261,7 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 
 	// Sanity check: reject timestamps more than 1 minute in the future
 	if eventTime > now+60 {
-		core.LogDebugF("EDDN: Skipping future %s for %s at %s (event: %d, now: %d) [%s]", eventType, stationId, eventTimeStr, eventTime, now, uploaderID)
+		core.LogDebugF("EDDN: Skipping future %s for %s at %s (event: %d, now: %d) [%s]", eventType, getCarrierDisplayName(stationId), eventTimeStr, eventTime, now, uploaderID)
 		return
 	}
 
@@ -269,7 +269,7 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 	state := database.FetchCarrierState(stationId)
 	if state != nil && state.LocationUpdated != nil && *state.LocationUpdated >= eventTime {
 		// We already have a newer or same-time update, skip
-		core.LogDebugF("EDDN: Skipping old %s for %s at %s (have: %d) [%s]", eventType, stationId, eventTimeStr, *state.LocationUpdated, uploaderID)
+		core.LogDebugF("EDDN: Skipping old %s for %s at %s (have: %d) [%s]", eventType, getCarrierDisplayName(stationId), eventTimeStr, *state.LocationUpdated, uploaderID)
 		return
 	}
 
@@ -286,10 +286,10 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 	_, changed := database.UpdateCarrierLocation(stationId, system, "", eventTime)
 
 	if changed {
-		core.LogInfoF("EDDN: %s - Carrier %s location changed to %s at %s [%s]", eventType, stationId, system, eventTimeStr, uploaderID)
+		core.LogInfoF("EDDN: %s - %s location changed to %s at %s [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
 		PostCarrierFlightLog(stationId, []string{"location: " + system})
 	} else {
-		core.LogDebugF("EDDN: %s - Carrier %s location confirmed at %s (%s) [%s]", eventType, stationId, system, eventTimeStr, uploaderID)
+		core.LogDebugF("EDDN: %s - %s location confirmed at %s (%s) [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
 	}
 }
 
@@ -346,11 +346,11 @@ func handleSuspiciousLocation(stationId, system string, eventTime int64, eventTy
 		// Same location reported again - count as validation
 		pending.Validations++
 		core.LogDebugF("EDDN: Suspicious %s for %s -> %s validated (%d/2) [%s] reason: %s",
-			eventType, stationId, system, pending.Validations, uploaderID, reason)
+			eventType, getCarrierDisplayName(stationId), system, pending.Validations, uploaderID, reason)
 
 		if pending.Validations >= 2 {
 			// Enough validations, apply the update
-			core.LogInfoF("EDDN: %s - Carrier %s location validated and changed to %s [%s]", eventType, stationId, system, uploaderID)
+			core.LogInfoF("EDDN: %s - %s location validated and changed to %s [%s]", eventType, getCarrierDisplayName(stationId), system, uploaderID)
 			database.UpdateCarrierLocation(stationId, system, "", eventTime)
 			PostCarrierFlightLog(stationId, []string{"location: " + system + " (validated)"})
 			delete(suspiciousLocations, stationId)
@@ -366,7 +366,7 @@ func handleSuspiciousLocation(stationId, system string, eventTime int64, eventTy
 		Validations: 1,
 	}
 	core.LogWarnF("EDDN: Suspicious %s for %s -> %s, needs validation (1/2) [%s] reason: %s",
-		eventType, stationId, system, uploaderID, reason)
+		eventType, getCarrierDisplayName(stationId), system, uploaderID, reason)
 }
 
 func formatDistance(d float64) string {
@@ -392,18 +392,18 @@ func updateCarrierPendingJump(stationId, destSystem, departureTime string) {
 	} else if t, err := time.Parse("2006-01-02T15:04:05Z", departureTime); err == nil {
 		jumpTime = t.Unix()
 	} else {
-		core.LogDebugF("EDDN: Failed to parse departure time '%s' for %s", departureTime, stationId)
+		core.LogDebugF("EDDN: Failed to parse departure time '%s' for %s", departureTime, getCarrierDisplayName(stationId))
 		return
 	}
 
 	database.UpdateCarrierPendingJump(stationId, &destSystem, &jumpTime)
-	core.LogInfoF("EDDN: CarrierJumpRequest - Carrier %s scheduled jump to %s at %s", stationId, destSystem, departureTime)
+	core.LogInfoF("EDDN: CarrierJumpRequest - %s scheduled jump to %s at %s", getCarrierDisplayName(stationId), destSystem, departureTime)
 	PostCarrierFlightLog(stationId, []string{"pending jump: " + destSystem})
 }
 
 func clearCarrierPendingJump(stationId string) {
 	database.ClearCarrierPendingJump(stationId)
-	core.LogInfoF("EDDN: CarrierJumpCancelled - Carrier %s jump cancelled", stationId)
+	core.LogInfoF("EDDN: CarrierJumpCancelled - %s jump cancelled", getCarrierDisplayName(stationId))
 	PostCarrierFlightLog(stationId, []string{"jump cancelled"})
 }
 
@@ -430,6 +430,15 @@ func isCarrierCallsign(s string) bool {
 // isOurCarrier checks if a station ID is one of our configured carriers
 func isOurCarrier(stationId string) bool {
 	return carrierCallsigns[stationId]
+}
+
+// getCarrierDisplayName returns "Name (CALLSIGN)" for our carriers, or just the callsign otherwise
+func getCarrierDisplayName(stationId string) string {
+	cfg := core.Settings.GetCarrierByStationId(stationId)
+	if cfg != nil {
+		return fmt.Sprintf("%s (%s)", cfg.Name, stationId)
+	}
+	return stationId
 }
 
 // checkAndRecordFollower checks if an external carrier is near any of our carriers
@@ -468,14 +477,14 @@ func checkAndRecordFollower(followerStationId, system string, eventTime int64) {
 			isNew := database.UpsertCarrierFollower(followerStationId, stationId, system, distance, eventTime)
 			if isNew {
 				core.LogDebugF("EDDN: Follower %s detected near %s at %s (%.1f ly)",
-					followerStationId, stationId, system, distance)
+					followerStationId, getCarrierDisplayName(stationId), system, distance)
 			} else {
 				core.LogTraceF("EDDN: Follower %s updated near %s at %s (%.1f ly, same location)",
-					followerStationId, stationId, system, distance)
+					followerStationId, getCarrierDisplayName(stationId), system, distance)
 			}
 			return // Only record once per event (nearest carrier)
 		}
 		core.LogTraceF("EDDN: External carrier %s at %s is %.1f ly from %s (threshold: %.0f)",
-			followerStationId, system, distance, stationId, threshold)
+			followerStationId, system, distance, getCarrierDisplayName(stationId), threshold)
 	}
 }
