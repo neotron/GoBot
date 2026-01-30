@@ -11,6 +11,7 @@ import (
 	"GoBot/core"
 	"GoBot/core/database"
 	"GoBot/core/dispatch"
+
 	"github.com/thoas/go-funk"
 )
 
@@ -105,7 +106,7 @@ func handleLocationLookup(commander string, m *dispatch.Message) {
 	} else {
 		switch c.Msgnum {
 		case 100:
-			m.ReplyToChannel("I have no idea where %s is - perhaps they aren't sharing their position?", commander)
+			m.ReplyToChannel("I have no idea where %s is. To see commander location, go to EDSM settings, enable Public Profile and make sure Flight Map is also public.", commander)
 		case 203:
 			m.ReplyToChannel("There's no known commander by the name %s.", commander)
 		default:
@@ -331,8 +332,15 @@ func handleDistance(s []string, m *dispatch.Message) {
 		}
 
 		// Look up system coordinates by name
-		system := getSystemCoords(systemName, m)
-		if system != nil {
+		sysResult := lookupSystemCoords(systemName)
+		if sysResult.Error != nil {
+			m.ReplyToChannel("Failed to complete EDSM request.")
+			core.LogError("EDSM lookup failed: ", sysResult.Error)
+			continue
+		}
+
+		if sysResult.Found && sysResult.HasCoords {
+			system := sysResult.System
 			if len(waypointName) > 0 {
 				system.Name = waypointName
 			}
@@ -340,58 +348,86 @@ func handleDistance(s []string, m *dispatch.Message) {
 			continue
 		}
 
-		// Check if the "system" is a commander
+		if sysResult.Found && !sysResult.HasCoords {
+			// System exists but has no coordinates
+			m.ReplyToChannel("System %s has not been trilaterated.", systemName)
+			continue
+		}
+
+		// System not found - check if it's a commander
 		location := fetchCommanderLocation(systemName, m)
 
-		if location != nil && len(location.System) > 0 {
-			sys := getSystemCoords(location.System, m)
-			if sys != nil {
-				sys.Name = fmt.Sprintf("Cmdr %s `(in %s)`", systemName, sys.Name)
-				calcDist(*sys)
-			} else {
-				reportNotTrilaterated(systemName, m)
+		if location != nil {
+			if len(location.System) > 0 {
+				// Commander found with location
+				sys := getSystemCoords(location.System, m)
+				if sys != nil {
+					sys.Name = fmt.Sprintf("Cmdr %s `(in %s)`", systemName, sys.Name)
+					calcDist(*sys)
+				}
+				// If sys is nil, getSystemCoords already reported the error
+				continue
 			}
-		} else {
-			reportNotTrilaterated(systemName, m)
+			// Commander exists but not sharing location (Msgnum 100)
+			if location.Msgnum == 100 {
+				m.ReplyToChannel("Commander %s is not sharing their flight log. To enable, go to EDSM settings, enable Public Profile and make sure Flight Map is also public.", systemName)
+				continue
+			}
 		}
+
+		// Neither system nor commander found
+		m.ReplyToChannel("Unknown system or commander: %s", systemName)
 	}
 }
 
-func getSystemCoords(systemName string, m *dispatch.Message) *SystemModel {
+// SystemLookupResult contains the result of a system coordinate lookup
+type SystemLookupResult struct {
+	System    *SystemModel
+	Found     bool // System exists in EDSM
+	HasCoords bool // System has coordinates
+	Error     error
+}
+
+func lookupSystemCoords(systemName string) SystemLookupResult {
 	u, err := core.MakeURL("https://www.edsm.net/api-v1/system", []core.URLParams{
 		{"systemName", systemName},
 		{"coords", "1"},
 	})
-
 	if err != nil {
-		m.ReplyToChannel("Failed to form EDSM request.")
-		core.LogError("Failed to make URL: ", err)
-		return nil
+		return SystemLookupResult{Error: err}
 	}
 
 	res, err := http.Get(u.String())
 	if err != nil {
-		m.ReplyToChannel("Failed to complete request.")
-		core.LogError("Get Position api failed with error: ", err)
-		return nil
+		return SystemLookupResult{Error: err}
 	}
 	defer res.Body.Close()
+
 	var system SystemModel
 	decoder := json.NewDecoder(res.Body)
 	err = decoder.Decode(&system)
 
 	if err != nil || len(system.Name) == 0 {
-		return nil
+		return SystemLookupResult{Found: false}
 	}
 	if system.Coords == nil {
-		reportNotTrilaterated(systemName, m)
-		return nil
+		return SystemLookupResult{Found: true, HasCoords: false}
 	}
-	return &system
+	return SystemLookupResult{System: &system, Found: true, HasCoords: true}
 }
 
-func reportNotTrilaterated(systemName string, m *dispatch.Message) {
-	m.ReplyToChannel("%s has not been trilaterated.", systemName)
+func getSystemCoords(systemName string, m *dispatch.Message) *SystemModel {
+	result := lookupSystemCoords(systemName)
+	if result.Error != nil {
+		m.ReplyToChannel("Failed to complete EDSM request.")
+		core.LogError("EDSM lookup failed: ", result.Error)
+		return nil
+	}
+	if result.Found && !result.HasCoords {
+		m.ReplyToChannel("%s has not been trilaterated.", systemName)
+		return nil
+	}
+	return result.System
 }
 
 // calcDistance calculates distance between two coordinate sets
