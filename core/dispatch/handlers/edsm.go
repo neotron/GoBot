@@ -173,9 +173,9 @@ func handleClosestCarrier(location string, m *dispatch.Message) {
 	// Check if it's a carrier
 	if coords == nil {
 		if carrierSystem, carrierName, found := getCarrierSystem(location); found {
-			sys := getSystemCoords(carrierSystem, m)
-			if sys != nil && sys.Coords != nil {
-				coords = sys.Coords
+			sysResult := lookupSystemCoords(carrierSystem)
+			if sysResult.HasCoords {
+				coords = sysResult.System.Coords
 				locationName = fmt.Sprintf("%s `(in %s)`", carrierName, carrierSystem)
 			}
 		}
@@ -183,27 +183,39 @@ func handleClosestCarrier(location string, m *dispatch.Message) {
 
 	// Check if it's a system name
 	if coords == nil {
-		sys := getSystemCoords(location, m)
-		if sys != nil && sys.Coords != nil {
-			coords = sys.Coords
-			locationName = sys.Name
+		sysResult := lookupSystemCoords(location)
+		if sysResult.Error != nil {
+			m.ReplyToChannel("Failed to complete EDSM request.")
+			return
+		}
+		if sysResult.Found && sysResult.HasCoords {
+			coords = sysResult.System.Coords
+			locationName = sysResult.System.Name
+		} else if sysResult.Found && !sysResult.HasCoords {
+			m.ReplyToChannel("System %s has not been trilaterated.", location)
+			return
 		}
 	}
 
 	// Check if it's a commander
 	if coords == nil {
 		cmdr := fetchCommanderLocation(location, m)
-		if cmdr != nil && len(cmdr.System) > 0 {
-			sys := getSystemCoords(cmdr.System, m)
-			if sys != nil && sys.Coords != nil {
-				coords = sys.Coords
-				locationName = fmt.Sprintf("Cmdr %s `(in %s)`", location, cmdr.System)
+		if cmdr != nil {
+			if len(cmdr.System) > 0 {
+				sys := getSystemCoords(cmdr.System, m)
+				if sys != nil && sys.Coords != nil {
+					coords = sys.Coords
+					locationName = fmt.Sprintf("Cmdr %s `(in %s)`", location, cmdr.System)
+				}
+			} else if cmdr.Msgnum == 100 {
+				m.ReplyToChannel("Commander %s is not sharing their flight log. To enable, go to EDSM settings, enable Public Profile and make sure Flight Map is also public.", location)
+				return
 			}
 		}
 	}
 
 	if coords == nil {
-		m.ReplyToChannel("Could not find coordinates for %s.", location)
+		m.ReplyToChannel("Unknown system or commander: %s", location)
 		return
 	}
 
