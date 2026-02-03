@@ -46,9 +46,9 @@ func init() {
 	dispatch.Register(&edsm{},
 		[]dispatch.MessageCommand{
 			{"loc", "Try to get a commanders location from EDSM. Syntax: loc <commander name>"},
-			{"dist", fmt.Sprint("Calculate distance between two systems. Syntax: dist <system> -> <system> ",
-				"(i.e: `dist Sol -> Sagittarius A*`). Supports system names, commander names, carrier names/callsigns, ",
-				"or X Y Z coordinates. Use `carrier` as destination to find closest carrier: `dist NeoTron -> carrier`.")},
+			{"dist", fmt.Sprint("Calculate distance between two locations. Syntax: dist <location> -> <location>. ",
+				"Locations can be: system names, commander names (EDSM), DW3 carrier names/callsigns, or X Y Z coordinates. ",
+				"Use `carrier` to find the closest DW3 carrier (e.g. `dist NeoTron -> carrier`).")},
 		}, nil, false)
 }
 
@@ -60,9 +60,6 @@ func (s *edsm) HandleCommand(m *dispatch.Message) bool {
 		systems := funk.Map(strings.Split(strings.Join(m.Args, " "), "->"), func(arg string) string {
 			return strings.Trim(arg, " \t\n")
 		}).([]string)
-		if len(systems) == 1 {
-			systems = append(systems, "Sol")
-		}
 		handleDistance(systems, m)
 	default:
 		return false
@@ -265,8 +262,8 @@ func handleDistance(s []string, m *dispatch.Message) {
 		"jaques":         "Colonia",
 		"jaques station": "Colonia",
 	}
-	if len(s) != 2 {
-		m.ReplyToChannel("Invalid syntax. Expected: '%sdist System Name -> System 2 Name`", core.Settings.CommandPrefix())
+	if len(s) != 2 || s[0] == "" || s[1] == "" {
+		m.ReplyToChannel("Invalid syntax. Expected: `%sdist <location> -> <location>` where location can be a system name, commander name, DW3 carrier name/callsign, or `carrier` to find the closest DW3 carrier.", core.Settings.CommandPrefix())
 		return
 	}
 

@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	eddnRelayURL              = "tcp://eddn.edcd.io:9500"
-	carrierJumpCooldown       = 20 * 60 // 20 minutes in seconds
-	suspiciousDistanceThreshold = 500.0 // ly - max expected single jump distance
+	eddnRelayURL                = "tcp://eddn.edcd.io:9500"
+	carrierJumpCooldown         = 20 * 60 // 20 minutes in seconds
+	suspiciousDistanceThreshold = 500.0   // ly - max expected single jump distance
 )
 
 // EDDNMessage is the outer wrapper for all EDDN messages
@@ -31,37 +31,26 @@ type EDDNMessage struct {
 
 // EDDNHeader contains metadata about the message
 type EDDNHeader struct {
-	UploaderID      string `json:"uploaderID"`
-	SoftwareName    string `json:"softwareName"`
-	SoftwareVersion string `json:"softwareVersion"`
+	UploaderID       string `json:"uploaderID"`
+	SoftwareName     string `json:"softwareName"`
+	SoftwareVersion  string `json:"softwareVersion"`
 	GatewayTimestamp string `json:"gatewayTimestamp"`
 }
 
 // JournalMessage represents a journal event from EDDN
 type JournalMessage struct {
-	Timestamp      string `json:"timestamp"` // ISO 8601 timestamp of the event
-	Event          string `json:"event"`
-	StarSystem     string `json:"StarSystem"`
-	SystemAddress  int64  `json:"SystemAddress"`
-	StationName    string `json:"StationName"`
-	MarketID       int64  `json:"MarketID"`
+	Timestamp     string `json:"timestamp"` // ISO 8601 timestamp of the event
+	Event         string `json:"event"`
+	StarSystem    string `json:"StarSystem"`
+	SystemAddress int64  `json:"SystemAddress"`
+	StationName   string `json:"StationName"`
+	MarketID      int64  `json:"MarketID"`
 	// For CarrierJump events
 	Docked    bool   `json:"Docked"`
 	CarrierID string `json:"CarrierID,omitempty"`
 	// For CarrierJumpRequest events
 	DepartureTime string `json:"DepartureTime,omitempty"` // ISO 8601 scheduled departure
 }
-
-// FSCarrierState represents the FSCarrierState event
-type FSCarrierState struct {
-	Timestamp     string `json:"timestamp"` // ISO 8601 timestamp of the event
-	Event         string `json:"event"`
-	CarrierID     string `json:"CarrierID"`
-	Callsign      string `json:"Callsign"`
-	StarSystem    string `json:"StarSystem"`
-	SystemAddress int64  `json:"SystemAddress"`
-}
-
 // carrierCallsigns maps our carrier station IDs for quick lookup
 var carrierCallsigns map[string]bool
 
@@ -154,13 +143,39 @@ func processEDDNMessage(compressed []byte) {
 		return
 	}
 
-	// Route based on schema
-	switch {
-	case strings.Contains(eddnMsg.Schema, "/journal/"):
+	// Route based on schema - carrier data comes through journal schema
+	if strings.Contains(eddnMsg.Schema, "/journal/") {
 		processJournalMessage(eddnMsg.Message, eddnMsg.Header.UploaderID)
-	case strings.Contains(eddnMsg.Schema, "/fscarrierstate/"):
-		processFSCarrierState(eddnMsg.Message, eddnMsg.Header.UploaderID)
 	}
+}
+
+// isCarrierEvent checks if the message involves a carrier and if it's one of ours.
+// Returns (isCarrier, isOurs).
+func isCarrierEvent(msg *JournalMessage) (bool, bool) {
+	if msg.StationName == "" || len(msg.StationName) != 7 || msg.StationName[3] != '-' {
+		return false, false
+	}
+	// Check alphanumeric parts (XXX-XXX format)
+	for i, c := range msg.StationName {
+		if i == 3 {
+			continue
+		}
+		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return false, false
+		}
+	}
+	return true, carrierCallsigns[msg.StationName]
+}
+
+// parseEDDNTimestamp parses ISO 8601 timestamp, falling back to current time.
+func parseEDDNTimestamp(timestamp string) int64 {
+	if t, err := time.Parse(time.RFC3339, timestamp); err == nil {
+		return t.Unix()
+	}
+	if t, err := time.Parse("2006-01-02T15:04:05Z", timestamp); err == nil {
+		return t.Unix()
+	}
+	return time.Now().Unix()
 }
 
 func processJournalMessage(raw json.RawMessage, uploaderID string) {
@@ -169,72 +184,26 @@ func processJournalMessage(raw json.RawMessage, uploaderID string) {
 		return
 	}
 
-	// Check for carrier-related events
-	switch msg.Event {
-	case "CarrierJump":
-		// CarrierJump includes the carrier ID and destination - carrier has jumped
-		if msg.CarrierID != "" && carrierCallsigns[msg.CarrierID] {
-			updateCarrierFromEDDN(msg.CarrierID, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
-			// Clear pending jump since the jump completed
-			database.ClearCarrierPendingJump(msg.CarrierID)
-		}
-	case "CarrierJumpRequest":
-		// Carrier jump has been scheduled
-		if msg.CarrierID != "" {
-			core.LogDebugF("EDDN CarrierJumpRequest: %s -> %s (departure: %s) [%s]", msg.CarrierID, msg.StarSystem, msg.DepartureTime, uploaderID)
-			if carrierCallsigns[msg.CarrierID] {
-				updateCarrierPendingJump(msg.CarrierID, msg.StarSystem, msg.DepartureTime)
-			}
-		}
-	case "CarrierJumpCancelled":
-		// Carrier jump has been cancelled
-		if msg.CarrierID != "" {
-			core.LogDebugF("EDDN CarrierJumpCancelled: %s [%s]", msg.CarrierID, uploaderID)
-			if carrierCallsigns[msg.CarrierID] {
-				clearCarrierPendingJump(msg.CarrierID)
-			}
-		}
-	case "Location", "FSDJump":
-		// If the station name matches a carrier callsign format (XXX-XXX)
-		if isCarrierCallsign(msg.StationName) && carrierCallsigns[msg.StationName] {
-			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
-		}
-	case "Docked":
-		// Docked at a carrier
-		if isCarrierCallsign(msg.StationName) && carrierCallsigns[msg.StationName] {
-			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
-		}
-	}
-
-	// Check for follower carriers in Location/FSDJump/Docked events
-	if (msg.Event == "Location" || msg.Event == "FSDJump" || msg.Event == "Docked") &&
-		msg.StationName != "" && isCarrierCallsign(msg.StationName) && !isOurCarrier(msg.StationName) {
-		var eventTime int64
-		if t, err := time.Parse(time.RFC3339, msg.Timestamp); err == nil {
-			eventTime = t.Unix()
-		} else if t, err := time.Parse("2006-01-02T15:04:05Z", msg.Timestamp); err == nil {
-			eventTime = t.Unix()
-		} else {
-			eventTime = time.Now().Unix()
-		}
-		checkAndRecordFollower(msg.StationName, msg.StarSystem, eventTime)
-	}
-}
-
-func processFSCarrierState(raw json.RawMessage, uploaderID string) {
-	var msg FSCarrierState
-	if err := json.Unmarshal(raw, &msg); err != nil {
+	// Check if this event involves a carrier
+	isCarrier, isOurs := isCarrierEvent(&msg)
+	if !isCarrier {
 		return
 	}
 
-	// Check if this is one of our carriers
-	callsign := msg.Callsign
-	if callsign == "" {
-		callsign = msg.CarrierID
-	}
-
-	if carrierCallsigns[callsign] {
-		updateCarrierFromEDDN(callsign, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
+	switch msg.Event {
+	case "CarrierJump":
+		if isOurs {
+			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
+			database.ClearCarrierPendingJump(msg.StationName)
+		} else {
+			checkAndRecordFollower(msg.StationName, msg.StarSystem, parseEDDNTimestamp(msg.Timestamp))
+		}
+	case "Location", "Docked":
+		if isOurs {
+			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
+		} else {
+			checkAndRecordFollower(msg.StationName, msg.StarSystem, parseEDDNTimestamp(msg.Timestamp))
+		}
 	}
 }
 
@@ -382,53 +351,6 @@ func formatDuration(seconds int64) string {
 		return fmt.Sprintf("%ds", seconds)
 	}
 	return fmt.Sprintf("%dm", seconds/60)
-}
-
-func updateCarrierPendingJump(stationId, destSystem, departureTime string) {
-	if destSystem == "" || departureTime == "" {
-		return
-	}
-
-	// Parse departure time
-	var jumpTime int64
-	if t, err := time.Parse(time.RFC3339, departureTime); err == nil {
-		jumpTime = t.Unix()
-	} else if t, err := time.Parse("2006-01-02T15:04:05Z", departureTime); err == nil {
-		jumpTime = t.Unix()
-	} else {
-		core.LogDebugF("EDDN: Failed to parse departure time '%s' for %s", departureTime, getCarrierDisplayName(stationId))
-		return
-	}
-
-	database.UpdateCarrierPendingJump(stationId, &destSystem, &jumpTime)
-	core.LogInfoF("EDDN: CarrierJumpRequest - %s scheduled jump to %s at %s", getCarrierDisplayName(stationId), destSystem, departureTime)
-	PostCarrierFlightLog(stationId, []string{"pending jump: " + destSystem})
-}
-
-func clearCarrierPendingJump(stationId string) {
-	database.ClearCarrierPendingJump(stationId)
-	core.LogInfoF("EDDN: CarrierJumpCancelled - %s jump cancelled", getCarrierDisplayName(stationId))
-	PostCarrierFlightLog(stationId, []string{"jump cancelled"})
-}
-
-// isCarrierCallsign checks if a string looks like a carrier callsign (XXX-XXX)
-func isCarrierCallsign(s string) bool {
-	if len(s) != 7 {
-		return false
-	}
-	if s[3] != '-' {
-		return false
-	}
-	// Check alphanumeric parts
-	for i, c := range s {
-		if i == 3 {
-			continue
-		}
-		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
-			return false
-		}
-	}
-	return true
 }
 
 // isOurCarrier checks if a station ID is one of our configured carriers
