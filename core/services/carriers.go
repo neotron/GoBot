@@ -247,8 +247,9 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		}
 	}
 
-	// Destination
-	if c.Destination != nil && *c.Destination != "" {
+	// Destination (hide if already at destination)
+	if c.Destination != nil && *c.Destination != "" &&
+		!strings.EqualFold(c.CurrentSystem, *c.Destination) {
 		destLine := fmt.Sprintf("\U0001F4CC Destination: %s", *c.Destination) // 📌
 		// Add distance if both systems are known
 		if c.CurrentSystem != "Unknown" {

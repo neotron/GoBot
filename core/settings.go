@@ -151,6 +151,11 @@ func (s *SettingsStorage) GetCarrierByStationId(stationId string) *CarrierConfig
 	return nil
 }
 
+// SetTestCarriers sets carrier config for testing purposes
+func (s *SettingsStorage) SetTestCarriers(carriers []CarrierConfig) {
+	s.data.Carriers = carriers
+}
+
 // SlashCommandGuildId returns the guild ID for slash command registration (empty = global)
 func (s *SettingsStorage) SlashCommandGuildId() string {
 	return s.data.SlashCommandGuildId
