@@ -256,6 +256,11 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 
 	if changed {
 		core.LogInfoF("EDDN: %s - %s location changed to %s at %s [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
+		// If no manual departure time is set, persist this jump time so
+		// the departed display doesn't change with every subsequent jump
+		if state == nil || state.JumpTime == nil {
+			database.UpdateCarrierJumpTime(stationId, &eventTime)
+		}
 		PostCarrierFlightLog(stationId, []string{"location: " + system})
 	} else {
 		core.LogDebugF("EDDN: %s - %s location confirmed at %s (%s) [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)

@@ -217,17 +217,17 @@ func formatSingleCarrier(c *CarrierInfo) string {
 	sb.WriteString(fmt.Sprintf("**%s - %s**\n", strings.ToUpper(c.Name), stationIdStr))
 
 	now := time.Now().Unix()
-	const recentConfirmThreshold = 30 * 60 // 30 minutes
-	const recentMoveThreshold = 25 * 60    // 25 minutes
+	const recentMoveThreshold = 25 * 60 // 25 minutes
+	const stationaryThreshold = 60 * 60 // 60 minutes
 
-	recentlyConfirmed := c.LocationUpdated != nil && (now-*c.LocationUpdated) < recentConfirmThreshold
 	recentlyMoved := c.LocationChanged != nil && (now-*c.LocationChanged) < recentMoveThreshold
+	stationaryLocation := c.LocationChanged == nil || (now-*c.LocationChanged) >= stationaryThreshold
 	departureNotFuture := c.JumpTime == nil || *c.JumpTime <= now
 	inTransit := recentlyMoved && departureNotFuture
 
 	// Location with timestamps
 	locationLabel := "Last Known Location"
-	if recentlyConfirmed {
+	if stationaryLocation {
 		locationLabel = "Current Location"
 	}
 	locationLine := fmt.Sprintf("\U0001F4CD %s: %s", locationLabel, c.CurrentSystem) // 📍
@@ -247,19 +247,25 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		sb.WriteString(fmt.Sprintf("\U0001F4E1 Pending Jump: %s (<t:%d:R>)\n", *c.PendingJumpDest, *c.PendingJumpTime)) // 📡
 	}
 
+	// Effective departure time: manual JumpTime, or fall back to last location change
+	departedTime := c.JumpTime
+	if departedTime == nil && c.LocationChanged != nil {
+		departedTime = c.LocationChanged
+		// Backfill: persist so future displays don't keep falling back
+		database.UpdateCarrierJumpTime(c.StationId, c.LocationChanged)
+	}
+
 	// Departure (always shown)
 	if inTransit {
-		if c.JumpTime != nil {
-			sb.WriteString(fmt.Sprintf("\U0001F680 In Transit (departed <t:%d:F>)\n", *c.JumpTime)) // 🚀
+		if departedTime != nil {
+			sb.WriteString(fmt.Sprintf("\U0001F680 In Transit (departed <t:%d:F>)\n", *departedTime)) // 🚀
 		} else {
 			sb.WriteString("\U0001F680 In Transit\n") // 🚀
 		}
-	} else if c.JumpTime != nil {
-		if *c.JumpTime <= now {
-			sb.WriteString(fmt.Sprintf("\U0001F680 Departed <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // 🚀
-		} else {
-			sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departing <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // ⏱️
-		}
+	} else if c.JumpTime != nil && *c.JumpTime > now {
+		sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departing <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // ⏱️
+	} else if departedTime != nil && *departedTime <= now {
+		sb.WriteString(fmt.Sprintf("\U0001F680 Departed <t:%d:F> (<t:%d:R>)\n", *departedTime, *departedTime)) // 🚀
 	} else {
 		sb.WriteString("\u23F1\uFE0F Departure: TBD\n") // ⏱️
 	}
