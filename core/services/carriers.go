@@ -216,8 +216,21 @@ func formatSingleCarrier(c *CarrierInfo) string {
 	}
 	sb.WriteString(fmt.Sprintf("**%s - %s**\n", strings.ToUpper(c.Name), stationIdStr))
 
+	now := time.Now().Unix()
+	const recentConfirmThreshold = 30 * 60 // 30 minutes
+	const recentMoveThreshold = 25 * 60    // 25 minutes
+
+	recentlyConfirmed := c.LocationUpdated != nil && (now-*c.LocationUpdated) < recentConfirmThreshold
+	recentlyMoved := c.LocationChanged != nil && (now-*c.LocationChanged) < recentMoveThreshold
+	departureNotFuture := c.JumpTime == nil || *c.JumpTime <= now
+	inTransit := recentlyMoved && departureNotFuture
+
 	// Location with timestamps
-	locationLine := fmt.Sprintf("\U0001F4CD Last Known Location: %s", c.CurrentSystem) // 📍
+	locationLabel := "Last Known Location"
+	if recentlyConfirmed {
+		locationLabel = "Current Location"
+	}
+	locationLine := fmt.Sprintf("\U0001F4CD %s: %s", locationLabel, c.CurrentSystem) // 📍
 	if c.LocationChanged != nil {
 		locationLine += fmt.Sprintf(" (changed <t:%d:R>", *c.LocationChanged)
 		if c.LocationUpdated != nil && *c.LocationUpdated != *c.LocationChanged {
@@ -229,48 +242,46 @@ func formatSingleCarrier(c *CarrierInfo) string {
 	}
 	sb.WriteString(locationLine + "\n")
 
-	now := time.Now().Unix()
-
 	// Pending jump from EDDN (scheduled jump)
 	if c.PendingJumpDest != nil && c.PendingJumpTime != nil && *c.PendingJumpTime > now {
 		sb.WriteString(fmt.Sprintf("\U0001F4E1 Pending Jump: %s (<t:%d:R>)\n", *c.PendingJumpDest, *c.PendingJumpTime)) // 📡
 	}
 
-	// Manual jump time
-	if c.JumpTime != nil {
+	// Departure (always shown)
+	if inTransit {
+		if c.JumpTime != nil {
+			sb.WriteString(fmt.Sprintf("\U0001F680 In Transit (departed <t:%d:F>)\n", *c.JumpTime)) // 🚀
+		} else {
+			sb.WriteString("\U0001F680 In Transit\n") // 🚀
+		}
+	} else if c.JumpTime != nil {
 		if *c.JumpTime <= now {
-			// Past - departed
 			sb.WriteString(fmt.Sprintf("\U0001F680 Departed <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // 🚀
 		} else {
-			// Future - departing
 			sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departing <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // ⏱️
 		}
+	} else {
+		sb.WriteString("\u23F1\uFE0F Departure: TBD\n") // ⏱️
 	}
 
-	// Destination (hide if already at destination)
+	// Destination (always shown)
 	if c.Destination != nil && *c.Destination != "" &&
 		!strings.EqualFold(c.CurrentSystem, *c.Destination) {
 		destLine := fmt.Sprintf("\U0001F4CC Destination: %s", *c.Destination) // 📌
-		// Add distance if both systems are known
 		if c.CurrentSystem != "Unknown" {
 			dist, err := GetDistanceBetweenSystems(c.CurrentSystem, *c.Destination)
 			if err == nil && dist >= 0 {
 				destLine += fmt.Sprintf(" (%.1f ly)", dist)
 			}
 		}
-		sb.WriteString(destLine + "\n\n")
+		sb.WriteString(destLine + "\n")
+	} else {
+		sb.WriteString("\U0001F4CC Destination: TBD\n") // 📌
 	}
 
-	// Status (always show if set)
+	// Status (only if set)
 	if c.Status != nil && *c.Status != "" {
-		sb.WriteString(fmt.Sprintf("\u2139\uFE0F Status: %s\n\n", *c.Status)) // ℹ️
-	}
-
-	// Transit message or no scheduled jump
-	if c.JumpTime != nil && *c.JumpTime <= now {
-		sb.WriteString("*Please remain seated while the carrier is in transit*\n")
-	} else if c.JumpTime == nil {
-		sb.WriteString("No scheduled jump\n")
+		sb.WriteString(fmt.Sprintf("\u2139\uFE0F Status: %s\n", *c.Status)) // ℹ️
 	}
 
 	return sb.String()
