@@ -281,7 +281,13 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		!strings.EqualFold(c.CurrentSystem, *c.Destination) {
 		destLine := fmt.Sprintf("\U0001F4CC Destination: %s", *c.Destination) // 📌
 		if c.CurrentSystem != "Unknown" {
-			dist, err := GetDistanceBetweenSystems(c.CurrentSystem, *c.Destination)
+			// Use extracted system name for EDSM lookup (e.g. "Thuecheae OH-Y a96-0"
+			// from "Thuecheae OH-Y a96-0 Body 4"), fall back to full destination
+			destSystem := *c.Destination
+			if extracted := ExtractProcGenSystemName(destSystem); extracted != "" {
+				destSystem = extracted
+			}
+			dist, err := GetDistanceBetweenSystems(c.CurrentSystem, destSystem)
 			if err == nil && dist >= 0 {
 				destLine += fmt.Sprintf(" (%.1f ly)", dist)
 			}
