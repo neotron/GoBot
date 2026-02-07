@@ -178,3 +178,5 @@ Temporary Items
 /.idea/GrepConsole.xml
 *.sql
 /source.db
+*.sqlite
+.idea/deployment.xml
