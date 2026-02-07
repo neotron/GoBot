@@ -255,6 +255,12 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		database.UpdateCarrierJumpTime(c.StationId, c.LocationChanged)
 	}
 
+	// Clear past departure time once carrier is stationary
+	if stationaryLocation && departedTime != nil && *departedTime <= now {
+		database.UpdateCarrierJumpTime(c.StationId, nil)
+		departedTime = nil
+	}
+
 	// Departure (always shown)
 	if inTransit {
 		if departedTime != nil {
