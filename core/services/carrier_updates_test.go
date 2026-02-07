@@ -411,6 +411,124 @@ func TestParseCarrierUpdates_UnknownCarrierIgnored(t *testing.T) {
 	}
 }
 
+// --- stripUnicodeFormatting tests ---
+
+func TestStripUnicodeFormatting(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no formatting characters",
+			input: "Destination System: Sol",
+			want:  "Destination System: Sol",
+		},
+		{
+			name:  "leading FSI characters",
+			input: "\u2068\u2068\u2068Destination System: Thuecheae OH-Y a96-0",
+			want:  "Destination System: Thuecheae OH-Y a96-0",
+		},
+		{
+			name:  "mixed directional isolates",
+			input: "\u2066hello\u2067world\u2068test\u2069end",
+			want:  "helloworldtestend",
+		},
+		{
+			name:  "zero-width spaces",
+			input: "Departure:\u200B 8th Feb 16:00 UTC",
+			want:  "Departure: 8th Feb 16:00 UTC",
+		},
+		{
+			name:  "LTR and RTL marks",
+			input: "Carrier:\u200E DSEV\u200F Test",
+			want:  "Carrier: DSEV Test",
+		},
+		{
+			name:  "BOM character",
+			input: "\uFEFFCarrier: Test",
+			want:  "Carrier: Test",
+		},
+		{
+			name:  "directional embedding characters",
+			input: "\u202ADestination\u202B System\u202C: Sol",
+			want:  "Destination System: Sol",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "only formatting characters",
+			input: "\u2068\u2069\u200B\uFEFF",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripUnicodeFormatting(tt.input)
+			if got != tt.want {
+				t.Errorf("stripUnicodeFormatting(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- Unicode formatting in ParseCarrierUpdates ---
+
+func TestParseCarrierUpdates_UnicodeFormatting(t *testing.T) {
+	setupTestCarriers()
+
+	// Simulates Discord message with U+2068 (First Strong Isolate) characters
+	content := "Carrier: DSEV Distant Suns - V2W-85Z\n" +
+		"Current System: Thuecheae MT-Q e5-8\n" +
+		"\u2068\u2068\u2068\u2068\u2068\u2068Destination System: Thuecheae OH-Y a96-0\n" +
+		"\u2068\u2068Departure: 8th Feb 16:00 UTC\n"
+
+	updates := ParseCarrierUpdates(content)
+
+	if len(updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updates))
+	}
+
+	u := updates[0]
+	if u.StationId != "V2W-85Z" {
+		t.Errorf("StationId = %q, want V2W-85Z", u.StationId)
+	}
+	if u.Destination == nil {
+		t.Fatal("expected Destination to be set, got nil")
+	}
+	if *u.Destination != "Thuecheae OH-Y a96-0" {
+		t.Errorf("Destination = %q, want %q", *u.Destination, "Thuecheae OH-Y a96-0")
+	}
+	if u.Departure == nil || *u.Departure <= 0 {
+		t.Errorf("expected Departure > 0 (parsed time), got %v", u.Departure)
+	}
+}
+
+// --- Destination without "System" keyword ---
+
+func TestParseCarrierUpdates_DestinationWithoutSystem(t *testing.T) {
+	setupTestCarriers()
+
+	content := "Carrier: Pillar of Chista TBQ-6VX\nDestination: Thuecheae OH-Y a96-0 Body 4"
+	updates := ParseCarrierUpdates(content)
+
+	if len(updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updates))
+	}
+
+	u := updates[0]
+	if u.Destination == nil {
+		t.Fatal("expected Destination to be set, got nil")
+	}
+	if *u.Destination != "Thuecheae OH-Y a96-0 Body 4" {
+		t.Errorf("Destination = %q, want %q", *u.Destination, "Thuecheae OH-Y a96-0 Body 4")
+	}
+}
+
 func TestParseCarrierUpdates_NoCarrierPrefix(t *testing.T) {
 	setupTestCarriers()
 

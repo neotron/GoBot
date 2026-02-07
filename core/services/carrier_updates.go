@@ -96,8 +96,9 @@ func ProcessCarrierUpdateChannelOnStartup(s *discordgo.Session) {
 func ParseCarrierUpdates(content string) []CarrierUpdate {
 	var updates []CarrierUpdate
 
-	// Remove markdown code block markers
+	// Remove markdown code block markers and Unicode formatting characters
 	content = strings.ReplaceAll(content, "```", "")
+	content = stripUnicodeFormatting(content)
 
 	// Split by "Carrier:" (case-insensitive) to find carrier blocks
 	// Use regex to split while preserving case
@@ -286,6 +287,25 @@ func ExtractProcGenSystemName(text string) string {
 	}
 
 	return strings.Join(regionWords, " ") + " " + sectorMass
+}
+
+// stripUnicodeFormatting removes invisible Unicode formatting characters that
+// Discord may insert (directional isolates, embedding marks, zero-width spaces, etc.)
+func stripUnicodeFormatting(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= '\u200B' && r <= '\u200F': // zero-width spaces, LTR/RTL marks
+			return -1
+		case r >= '\u2028' && r <= '\u202F': // line/paragraph separators, directional embedding
+			return -1
+		case r >= '\u2066' && r <= '\u2069': // directional isolates
+			return -1
+		case r == '\uFEFF': // BOM / zero-width no-break space
+			return -1
+		default:
+			return r
+		}
+	}, s)
 }
 
 // isAlphaWord checks if a string contains only letters
