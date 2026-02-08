@@ -335,13 +335,13 @@ func FormatCarrierStats(stationId string) string {
 	sb.WriteString("\U0001F4CA **Statistics**\n") // 📊
 	sb.WriteString(fmt.Sprintf("\U0001F680 Hyperspace jumps: %d (%.1f ly)\n", total.Jumps, total.LYJumped))
 	sb.WriteString(fmt.Sprintf("\U0001F4E1 Transponder pings: %d\n", total.LocationEvents))
-	sb.WriteString(fmt.Sprintf("\u2693 Commanders docked: %d\n", total.DockedEvents))
+	sb.WriteString(fmt.Sprintf("\U0001F6EC Commanders docked: %d\n", total.DockedEvents))
 
 	if weekly.Jumps > 0 || weekly.LocationEvents > 0 || weekly.DockedEvents > 0 {
 		sb.WriteString("\n**This week:**\n")
 		sb.WriteString(fmt.Sprintf("\U0001F680 Hyperspace jumps: %d (%.1f ly)\n", weekly.Jumps, weekly.LYJumped))
 		sb.WriteString(fmt.Sprintf("\U0001F4E1 Transponder pings: %d\n", weekly.LocationEvents))
-		sb.WriteString(fmt.Sprintf("\u2693 Commanders docked: %d\n", weekly.DockedEvents))
+		sb.WriteString(fmt.Sprintf("\U0001F6EC Commanders docked: %d\n", weekly.DockedEvents))
 	}
 
 	return sb.String()
