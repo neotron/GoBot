@@ -255,12 +255,6 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		database.UpdateCarrierJumpTime(c.StationId, c.LocationChanged)
 	}
 
-	// Clear past departure time once carrier is stationary
-	if stationaryLocation && departedTime != nil && *departedTime <= now {
-		database.UpdateCarrierJumpTime(c.StationId, nil)
-		departedTime = nil
-	}
-
 	// Departure (always shown)
 	if inTransit {
 		if departedTime != nil {
@@ -270,8 +264,10 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		}
 	} else if c.JumpTime != nil && *c.JumpTime > now {
 		sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departing <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // ⏱️
-	} else if departedTime != nil && *departedTime <= now {
+	} else if departedTime != nil && *departedTime <= now && !stationaryLocation {
 		sb.WriteString(fmt.Sprintf("\U0001F680 Departed <t:%d:F> (<t:%d:R>)\n", *departedTime, *departedTime)) // 🚀
+	} else if c.JumpTime != nil && *c.JumpTime <= now && stationaryLocation {
+		sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departure scheduled <t:%d:F> (expected soon)\n", *c.JumpTime)) // ⏱️
 	} else {
 		sb.WriteString("\u23F1\uFE0F Departure: TBD\n") // ⏱️
 	}
