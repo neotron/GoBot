@@ -144,8 +144,8 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 		},
 	},
 	{
-		Name:                     "carrierinfo",
-		Description:              "Get detailed info about a carrier",
+		Name:                     "followerinfo",
+		Description:              "Get detailed info about a follower carrier",
 		DefaultMemberPermissions: &permissionAdministrator,
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -153,6 +153,19 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 				Name:        "carrier",
 				Description: "Carrier station ID (e.g., ABC-123)",
 				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        "carrierinfo",
+		Description: "Get detailed info and stats about a fleet carrier",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:         discordgo.ApplicationCommandOptionString,
+				Name:         "carrier",
+				Description:  "Carrier station ID",
+				Required:     true,
+				Autocomplete: true,
 			},
 		},
 	},
@@ -322,14 +335,19 @@ func handleCarrierSlashAppCommand(s *discordgo.Session, i *discordgo.Interaction
 		output := services.FormatFollowerList(followers, sortBy)
 		respond(s, i, output, true)
 
-	case "carrierinfo":
+	case "followerinfo":
 		if !canManageCarriersSlash(userID, i.ChannelID) {
-			respond(s, i, "You don't have permission to view carrier info.", true)
+			respond(s, i, "You don't have permission to view follower info.", true)
 			return
 		}
 		stationId := strings.ToUpper(data.Options[0].StringValue())
 		follower := services.GetFollowerInfo(stationId)
 		output := services.FormatFollowerInfo(follower)
+		respond(s, i, output, true)
+
+	case "carrierinfo":
+		stationId := strings.ToUpper(data.Options[0].StringValue())
+		output := services.FormatCarrierInfo(stationId)
 		respond(s, i, output, true)
 	}
 }

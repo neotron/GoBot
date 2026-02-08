@@ -35,6 +35,26 @@ CREATE TABLE IF NOT EXISTS carrier_state (
 );
 `
 
+const carrierStatsSchema = `
+CREATE TABLE IF NOT EXISTS carrier_stats (
+	station_id TEXT NOT NULL,
+	week_start TEXT NOT NULL,
+	jumps INTEGER DEFAULT 0,
+	ly_jumped REAL DEFAULT 0,
+	location_events INTEGER DEFAULT 0,
+	docked_events INTEGER DEFAULT 0,
+	PRIMARY KEY (station_id, week_start)
+);
+`
+
+// CarrierStats holds aggregated carrier activity statistics
+type CarrierStats struct {
+	Jumps          int     `db:"jumps"`
+	LYJumped       float64 `db:"ly_jumped"`
+	LocationEvents int     `db:"location_events"`
+	DockedEvents   int     `db:"docked_events"`
+}
+
 const followerSchema = `
 CREATE TABLE IF NOT EXISTS carrier_followers (
 	follower_station_id TEXT PRIMARY KEY,
@@ -79,6 +99,11 @@ func InitializeCarrierTable() {
 	_, err := database.Exec(followerSchema)
 	if err != nil {
 		core.LogErrorF("Failed to create carrier_followers table: %s", err)
+	}
+
+	_, err = database.Exec(carrierStatsSchema)
+	if err != nil {
+		core.LogErrorF("Failed to create carrier_stats table: %s", err)
 	}
 }
 
@@ -305,4 +330,99 @@ func FetchRecentFollowers(days int, minSightings int, sortBy string) []CarrierFo
 		return nil
 	}
 	return followers
+}
+
+// currentWeekStart returns the Monday of the current UTC week as "2006-01-02"
+func currentWeekStart() string {
+	now := time.Now().UTC()
+	weekday := now.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	monday := now.AddDate(0, 0, -int(weekday-time.Monday))
+	return monday.Format("2006-01-02")
+}
+
+// IncrementCarrierJump records a carrier jump with distance
+func IncrementCarrierJump(stationId string, distanceLY float64) {
+	if database == nil {
+		return
+	}
+	week := currentWeekStart()
+	_, err := database.Exec(`
+		INSERT INTO carrier_stats (station_id, week_start, jumps, ly_jumped)
+		VALUES (?, ?, 1, ?)
+		ON CONFLICT(station_id, week_start) DO UPDATE SET
+			jumps = jumps + 1,
+			ly_jumped = ly_jumped + ?`,
+		stationId, week, distanceLY, distanceLY)
+	if err != nil {
+		core.LogErrorF("Failed to increment carrier jump stats: %s", err)
+	}
+}
+
+// IncrementCarrierLocationEvent records a Location event (player logged in near carrier)
+func IncrementCarrierLocationEvent(stationId string) {
+	if database == nil {
+		return
+	}
+	week := currentWeekStart()
+	_, err := database.Exec(`
+		INSERT INTO carrier_stats (station_id, week_start, location_events)
+		VALUES (?, ?, 1)
+		ON CONFLICT(station_id, week_start) DO UPDATE SET
+			location_events = location_events + 1`,
+		stationId, week)
+	if err != nil {
+		core.LogErrorF("Failed to increment carrier location event stats: %s", err)
+	}
+}
+
+// IncrementCarrierDockedEvent records a Docked event (player logged in while docked)
+func IncrementCarrierDockedEvent(stationId string) {
+	if database == nil {
+		return
+	}
+	week := currentWeekStart()
+	_, err := database.Exec(`
+		INSERT INTO carrier_stats (station_id, week_start, docked_events)
+		VALUES (?, ?, 1)
+		ON CONFLICT(station_id, week_start) DO UPDATE SET
+			docked_events = docked_events + 1`,
+		stationId, week)
+	if err != nil {
+		core.LogErrorF("Failed to increment carrier docked event stats: %s", err)
+	}
+}
+
+// GetCarrierStats returns total and current-week stats for a carrier
+func GetCarrierStats(stationId string) (total CarrierStats, weekly CarrierStats) {
+	if database == nil {
+		return
+	}
+
+	// Total stats across all weeks
+	err := database.Get(&total, `
+		SELECT COALESCE(SUM(jumps), 0) as jumps,
+			   COALESCE(SUM(ly_jumped), 0) as ly_jumped,
+			   COALESCE(SUM(location_events), 0) as location_events,
+			   COALESCE(SUM(docked_events), 0) as docked_events
+		FROM carrier_stats WHERE station_id = ?`, stationId)
+	if err != nil {
+		core.LogErrorF("Failed to fetch total carrier stats: %s", err)
+	}
+
+	// Current week stats
+	week := currentWeekStart()
+	err = database.Get(&weekly, `
+		SELECT COALESCE(jumps, 0) as jumps,
+			   COALESCE(ly_jumped, 0) as ly_jumped,
+			   COALESCE(location_events, 0) as location_events,
+			   COALESCE(docked_events, 0) as docked_events
+		FROM carrier_stats WHERE station_id = ? AND week_start = ?`, stationId, week)
+	if err != nil && err != sql.ErrNoRows {
+		core.LogErrorF("Failed to fetch weekly carrier stats: %s", err)
+	}
+
+	return
 }

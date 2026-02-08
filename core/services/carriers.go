@@ -309,6 +309,44 @@ func formatSingleCarrier(c *CarrierInfo) string {
 	return sb.String()
 }
 
+// FormatCarrierInfo formats detailed carrier info with stats for /carrierinfo
+func FormatCarrierInfo(stationId string) string {
+	info, err := GetCarrierInfo(stationId)
+	if err != nil {
+		return fmt.Sprintf("Carrier %s not found.", stationId)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(formatSingleCarrier(info))
+	sb.WriteString("\n")
+	sb.WriteString(FormatCarrierStats(stationId))
+	return sb.String()
+}
+
+// FormatCarrierStats formats carrier activity statistics
+func FormatCarrierStats(stationId string) string {
+	total, weekly := database.GetCarrierStats(stationId)
+
+	if total.Jumps == 0 && total.LocationEvents == 0 && total.DockedEvents == 0 {
+		return "\U0001F4CA **Statistics:** No activity recorded yet\n" // 📊
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\U0001F4CA **Statistics**\n") // 📊
+	sb.WriteString(fmt.Sprintf("\U0001F680 Hyperspace jumps: %d (%.1f ly)\n", total.Jumps, total.LYJumped))
+	sb.WriteString(fmt.Sprintf("\U0001F4E1 Transponder pings: %d\n", total.LocationEvents))
+	sb.WriteString(fmt.Sprintf("\U0001F6AC Commanders docked: %d\n", total.DockedEvents))
+
+	if weekly.Jumps > 0 || weekly.LocationEvents > 0 || weekly.DockedEvents > 0 {
+		sb.WriteString("\n**This week:**\n")
+		sb.WriteString(fmt.Sprintf("\U0001F680 Hyperspace jumps: %d (%.1f ly)\n", weekly.Jumps, weekly.LYJumped))
+		sb.WriteString(fmt.Sprintf("\U0001F4E1 Transponder pings: %d\n", weekly.LocationEvents))
+		sb.WriteString(fmt.Sprintf("\U0001F6AC Commanders docked: %d\n", weekly.DockedEvents))
+	}
+
+	return sb.String()
+}
+
 // GetCarrierStationIds returns list of valid station IDs for autocomplete
 func GetCarrierStationIds() []string {
 	carriers := core.Settings.Carriers()

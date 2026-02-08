@@ -199,9 +199,19 @@ func processJournalMessage(raw json.RawMessage, uploaderID string) {
 		} else {
 			checkAndRecordFollower(msg.StationName, msg.StarSystem, parseEDDNTimestamp(msg.Timestamp))
 		}
-	case "Location", "Docked":
+	case "Location":
 		if isOurs {
 			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
+			core.LogDebugF("Carrier %s: location event recorded (source: EDDN Location)", msg.StationName)
+			database.IncrementCarrierLocationEvent(msg.StationName)
+		} else {
+			checkAndRecordFollower(msg.StationName, msg.StarSystem, parseEDDNTimestamp(msg.Timestamp))
+		}
+	case "Docked":
+		if isOurs {
+			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
+			core.LogDebugF("Carrier %s: docked event recorded (source: EDDN Docked)", msg.StationName)
+			database.IncrementCarrierDockedEvent(msg.StationName)
 		} else {
 			checkAndRecordFollower(msg.StationName, msg.StarSystem, parseEDDNTimestamp(msg.Timestamp))
 		}
@@ -257,6 +267,19 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 
 	if changed {
 		core.LogInfoF("EDDN: %s - %s location changed to %s at %s [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
+
+		// Record jump stats with distance
+		var jumpDist float64
+		if state != nil && state.CurrentSystem != nil {
+			prevCoords, err1 := GetSystemCoords(*state.CurrentSystem)
+			newCoords, err2 := GetSystemCoords(system)
+			if err1 == nil && err2 == nil && prevCoords != nil && newCoords != nil {
+				jumpDist = CalculateDistance(prevCoords, newCoords)
+			}
+		}
+		core.LogDebugF("Carrier %s: jump recorded, %.1f ly (source: EDDN %s)", stationId, jumpDist, eventType)
+		database.IncrementCarrierJump(stationId, jumpDist)
+
 		// Update departure time if unset, or if the existing time is in the
 		// future (scheduled but carrier is already moving)
 		if state == nil || state.JumpTime == nil || *state.JumpTime > eventTime {
