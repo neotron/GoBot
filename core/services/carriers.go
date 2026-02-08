@@ -89,6 +89,7 @@ func SetCarrierJumpTime(stationId string, timestamp int64) error {
 	if core.Settings.GetCarrierByStationId(stationId) == nil {
 		return fmt.Errorf("carrier %s not found", stationId)
 	}
+	core.LogDebugF("Carrier %s: jump time set to %d (source: command/channel)", stationId, timestamp)
 	if !database.UpdateCarrierJumpTime(stationId, &timestamp) {
 		return fmt.Errorf("failed to update jump time")
 	}
@@ -100,6 +101,7 @@ func SetCarrierDestination(stationId string, destination string) error {
 	if core.Settings.GetCarrierByStationId(stationId) == nil {
 		return fmt.Errorf("carrier %s not found", stationId)
 	}
+	core.LogDebugF("Carrier %s: destination set to %q (source: command/channel)", stationId, destination)
 	if !database.UpdateCarrierDestination(stationId, &destination) {
 		return fmt.Errorf("failed to update destination")
 	}
@@ -111,6 +113,7 @@ func SetCarrierStatus(stationId string, status string) error {
 	if core.Settings.GetCarrierByStationId(stationId) == nil {
 		return fmt.Errorf("carrier %s not found", stationId)
 	}
+	core.LogDebugF("Carrier %s: status set to %q (source: command/channel)", stationId, status)
 	if !database.UpdateCarrierStatus(stationId, &status) {
 		return fmt.Errorf("failed to update status")
 	}
@@ -122,6 +125,7 @@ func SetCarrierLocation(stationId string, system string) error {
 	if core.Settings.GetCarrierByStationId(stationId) == nil {
 		return fmt.Errorf("carrier %s not found", stationId)
 	}
+	core.LogDebugF("Carrier %s: location set to %q (source: manual command)", stationId, system)
 	now := time.Now().Unix()
 	success, _ := database.UpdateCarrierLocation(stationId, system, "", now)
 	if !success {
@@ -136,6 +140,7 @@ func ClearCarrierField(stationId string, field string) error {
 		return fmt.Errorf("carrier %s not found", stationId)
 	}
 
+	core.LogDebugF("Carrier %s: clearing field %q (source: command/channel)", stationId, field)
 	switch strings.ToLower(field) {
 	case "jump":
 		database.UpdateCarrierJumpTime(stationId, nil)
@@ -224,6 +229,8 @@ func formatSingleCarrier(c *CarrierInfo) string {
 	stationaryLocation := c.LocationChanged == nil || (now-*c.LocationChanged) >= stationaryThreshold
 	departureNotFuture := c.JumpTime == nil || *c.JumpTime <= now
 	inTransit := recentlyMoved && departureNotFuture
+	// Carrier moved after the scheduled departure — it did depart
+	movedAfterDeparture := c.JumpTime != nil && c.LocationChanged != nil && *c.LocationChanged >= *c.JumpTime
 
 	// Location with timestamps
 	locationLabel := "Last Known Location"
@@ -252,6 +259,7 @@ func formatSingleCarrier(c *CarrierInfo) string {
 	if departedTime == nil && c.LocationChanged != nil {
 		departedTime = c.LocationChanged
 		// Backfill: persist so future displays don't keep falling back
+		core.LogDebugF("Carrier %s: jump time backfilled from LocationChanged %d (source: display backfill)", c.StationId, *c.LocationChanged)
 		database.UpdateCarrierJumpTime(c.StationId, c.LocationChanged)
 	}
 
@@ -264,7 +272,7 @@ func formatSingleCarrier(c *CarrierInfo) string {
 		}
 	} else if c.JumpTime != nil && *c.JumpTime > now {
 		sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departing <t:%d:F> (<t:%d:R>)\n", *c.JumpTime, *c.JumpTime)) // ⏱️
-	} else if departedTime != nil && *departedTime <= now && !stationaryLocation {
+	} else if departedTime != nil && *departedTime <= now && (!stationaryLocation || movedAfterDeparture) {
 		sb.WriteString(fmt.Sprintf("\U0001F680 Departed <t:%d:F> (<t:%d:R>)\n", *departedTime, *departedTime)) // 🚀
 	} else if c.JumpTime != nil && *c.JumpTime <= now && stationaryLocation {
 		sb.WriteString(fmt.Sprintf("\u23F1\uFE0F Departure scheduled <t:%d:F> (expected soon)\n", *c.JumpTime)) // ⏱️

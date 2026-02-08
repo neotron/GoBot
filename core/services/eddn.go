@@ -194,6 +194,7 @@ func processJournalMessage(raw json.RawMessage, uploaderID string) {
 	case "CarrierJump":
 		if isOurs {
 			updateCarrierFromEDDN(msg.StationName, msg.StarSystem, msg.Timestamp, msg.Event, uploaderID)
+			core.LogDebugF("Carrier %s: pending jump cleared (source: EDDN CarrierJump)", msg.StationName)
 			database.ClearCarrierPendingJump(msg.StationName)
 		} else {
 			checkAndRecordFollower(msg.StationName, msg.StarSystem, parseEDDNTimestamp(msg.Timestamp))
@@ -259,6 +260,11 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 		// Update departure time if unset, or if the existing time is in the
 		// future (scheduled but carrier is already moving)
 		if state == nil || state.JumpTime == nil || *state.JumpTime > eventTime {
+			var prevJumpTime *int64
+			if state != nil {
+				prevJumpTime = state.JumpTime
+			}
+			core.LogDebugF("Carrier %s: jump time set to %d (source: EDDN %s, previous: %v)", stationId, eventTime, eventType, prevJumpTime)
 			database.UpdateCarrierJumpTime(stationId, &eventTime)
 		}
 		PostCarrierFlightLog(stationId, []string{"location: " + system})
@@ -329,6 +335,7 @@ func handleSuspiciousLocation(stationId, system string, eventTime int64, eventTy
 		if pending.Validations >= 2 {
 			// Enough validations, apply the update
 			core.LogInfoF("EDDN: %s - %s location validated and changed to %s [%s]", eventType, getCarrierDisplayName(stationId), system, uploaderID)
+			core.LogDebugF("Carrier %s: location set to %q (source: EDDN validated suspicious)", stationId, system)
 			database.UpdateCarrierLocation(stationId, system, "", eventTime)
 			PostCarrierFlightLog(stationId, []string{"location: " + system + " (validated)"})
 			delete(suspiciousLocations, stationId)
