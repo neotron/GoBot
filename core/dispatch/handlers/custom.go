@@ -269,7 +269,7 @@ func toggleIsDm(m *dispatch.Message) {
 			if newDm {
 				messageType = "direct message"
 			}
-			core.LogInfoF("%s set command %s send method to %.", m.Author.Username, cmd, messageType)
+			core.LogInfoF("%s set command %s send method to %s.", m.Author.Username, cmd, messageType)
 			m.ReplyToChannel("Command %s will now be sent via %s.", cmd, messageType)
 		} else {
 			core.LogDebug("Command was not updated due to error.")
@@ -311,7 +311,7 @@ func removeCommand(m *dispatch.Message) {
 	cmd := m.Args[0]
 
 	if !database.RemoveCommandAlias(cmd) {
-		m.ReplyToChannel("**Error:** Command **%s** doesn't exist.")
+		m.ReplyToChannel("**Error:** Command **%s** doesn't exist.", cmd)
 		return
 	}
 	core.LogInfoF("%s removed command alias %s.", m.Author.Username, cmd)
@@ -327,7 +327,7 @@ func listCommands(m *dispatch.Message) {
 			if cmds := group.FetchCommands(); cmds != nil {
 				cmdString = strings.Join(funk.Map(cmds, func(cmd database.CommandAlias) string { return cmd.Command }).([]string), ", ")
 			}
-			m.ReplyToSender(fmt.Sprintf("**%s%s:**\n\t%s\n", prefix, group.Command, cmdString))
+			m.ReplyToSender("%s", fmt.Sprintf("**%s%s:**\n\t%s\n", prefix, group.Command, cmdString))
 		})
 	} else {
 		output = append(output, "**Categories:** \n\tNone found")
@@ -342,7 +342,7 @@ func listCommands(m *dispatch.Message) {
 	}
 
 	outputString := strings.Join(output, "\n")
-	m.ReplyToSender(outputString)
+	m.ReplyToSender("%s", outputString)
 }
 
 // isOnCooldown checks if a command+channel combo is on cooldown and updates the last used time if not

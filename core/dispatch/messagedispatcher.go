@@ -76,7 +76,7 @@ func (d *MessageDispatcher) HandleCommand(m *Message) bool {
 			//if message.flags.contains(.Here) {
 			//        message.replyToChannel(output.joined(separator: "\n"));
 			//    } else {
-			<-m.ReplyToSender(strings.Join(output, "\n"))
+			<-m.ReplyToSender("%s", strings.Join(output, "\n"))
 			//    }
 		}
 	}()

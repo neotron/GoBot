@@ -99,7 +99,7 @@ func handleLocationLookup(commander string, m *dispatch.Message) {
 		if len(c.Date) > 0 {
 			output = fmt.Sprint(output, " at ", c.Date)
 		}
-		m.ReplyToChannel(output)
+		m.ReplyToChannel("%s", output)
 	} else {
 		switch c.Msgnum {
 		case 100:

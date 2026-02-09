@@ -81,7 +81,7 @@ func handleRandomImage(m *dispatch.Message, image string) {
 		core.LogError("Failed to parse response", err)
 		return
 	}
-	m.ReplyToChannel(model.Url)
+	m.ReplyToChannel("%s", model.Url)
 }
 
 func handleRandomDog(m *dispatch.Message, breed string) {
@@ -107,7 +107,7 @@ func handleRandomDog(m *dispatch.Message, breed string) {
 		core.LogError("Failed to parse response", err)
 		return
 	}
-	m.ReplyToChannel(model.Url)
+	m.ReplyToChannel("%s", model.Url)
 }
 
 func handleRandomCorgi(m *dispatch.Message) {
@@ -137,6 +137,6 @@ func handleRandomAnimal(m *dispatch.Message, breed string, showFacts bool) {
 	if showFacts {
 		m.ReplyToChannel("%s\n\n%s", model.Fact, model.Url)
 	} else {
-		m.ReplyToChannel(model.Url)
+		m.ReplyToChannel("%s", model.Url)
 	}
 }
