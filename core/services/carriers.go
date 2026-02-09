@@ -361,8 +361,8 @@ func GetCarrierStationIds() []string {
 // ParseJumpTime parses a time string and returns unix timestamp
 // Supports formats:
 //   - Unix timestamp (e.g., "1737399000")
-//   - "20th January, 18:30 UTC" (assumes current year)
-//   - "20th January 2026, 18:30 UTC"
+//   - "20th January, 18:30 UTC" or "20th January 2026, 18:30 UTC"
+//   - "9th Feb 1400 UTC" (military time, no separator)
 func ParseJumpTime(input string) (int64, error) {
 	input = strings.TrimSpace(input)
 
@@ -371,13 +371,20 @@ func ParseJumpTime(input string) (int64, error) {
 		return ts, nil
 	}
 
-	// Try parsing human-readable format: "20th January, 18:30 UTC"
-	// Pattern: day + ordinal + month + optional year + time (: or .) + UTC + optional suffix (approx, etc.)
-	pattern := regexp.MustCompile(`(?i)(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(\d{4}))?,?\s+(\d{1,2})[:.](\d{2})\s*UTC`)
-	matches := pattern.FindStringSubmatch(input)
+	// Standard format: "20th January, 18:30 UTC" or "20th January 2026, 18:30 UTC"
+	// Year group restricted to 2xxx to avoid consuming military time as year
+	standardPattern := regexp.MustCompile(`(?i)(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(2\d{3}))?,?\s+(\d{1,2})[:.](\d{2})\s*UTC`)
+
+	// Military time: "9th Feb 1400 UTC" or "9th Feb 2026, 1400 UTC"
+	militaryPattern := regexp.MustCompile(`(?i)(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(2\d{3}))?,?\s+(\d{2})(\d{2})\s*UTC`)
+
+	matches := standardPattern.FindStringSubmatch(input)
+	if matches == nil {
+		matches = militaryPattern.FindStringSubmatch(input)
+	}
 
 	if matches == nil {
-		return 0, fmt.Errorf("invalid time format. Use: '20th January, 18:30 UTC' or unix timestamp")
+		return 0, fmt.Errorf("invalid time format. Use: '20th January, 18:30 UTC' or '9th Feb 1400 UTC'")
 	}
 
 	day, _ := strconv.Atoi(matches[1])

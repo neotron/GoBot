@@ -539,3 +539,71 @@ func TestParseCarrierUpdates_NoCarrierPrefix(t *testing.T) {
 		t.Errorf("expected 0 updates, got %d", len(updates))
 	}
 }
+
+// --- ParseJumpTime tests ---
+
+func TestParseJumpTime(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		// Standard format with separator
+		{"colon separator", "9th Feb, 16:00 UTC", false},
+		{"dot separator", "9th Feb, 16.00 UTC", false},
+		{"with year colon", "9th February 2026, 16:00 UTC", false},
+		{"no comma", "9th Feb 16:00 UTC", false},
+		{"full month", "20th January, 18:30 UTC", false},
+
+		// Military time (no separator)
+		{"military time", "9th Feb 1400 UTC", false},
+		{"military time with comma", "9th Feb, 1400 UTC", false},
+		{"military time with year", "9th Feb 2026, 1400 UTC", false},
+		{"military time no ordinal", "9 Feb 1400 UTC", false},
+		{"military midnight", "10th Feb 0000 UTC", false},
+		{"military evening", "9th Feb 2300 UTC", false},
+
+		// Unix timestamp
+		{"unix timestamp", "1737399000", false},
+
+		// Invalid
+		{"random text", "sometime next week", true},
+		{"empty", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts, err := ParseJumpTime(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ParseJumpTime(%q) expected error, got %d", tt.input, ts)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ParseJumpTime(%q) unexpected error: %s", tt.input, err)
+				return
+			}
+			if ts <= 0 {
+				t.Errorf("ParseJumpTime(%q) = %d, want > 0", tt.input, ts)
+			}
+		})
+	}
+}
+
+func TestParseJumpTime_MilitaryTimeValues(t *testing.T) {
+	// Verify "9th Feb 1400 UTC" and "9th Feb, 14:00 UTC" produce the same result
+	military, err := ParseJumpTime("9th Feb 1400 UTC")
+	if err != nil {
+		t.Fatalf("military time failed: %s", err)
+	}
+
+	standard, err := ParseJumpTime("9th Feb, 14:00 UTC")
+	if err != nil {
+		t.Fatalf("standard time failed: %s", err)
+	}
+
+	if military != standard {
+		t.Errorf("military=%d != standard=%d, should be equal", military, standard)
+	}
+}
