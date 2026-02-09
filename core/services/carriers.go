@@ -363,6 +363,7 @@ func GetCarrierStationIds() []string {
 //   - Unix timestamp (e.g., "1737399000")
 //   - "20th January, 18:30 UTC" or "20th January 2026, 18:30 UTC"
 //   - "9th Feb 1400 UTC" (military time, no separator)
+//   - "February 9th 19:30" or "February 9th 1930 UTC" (month-first)
 func ParseJumpTime(input string) (int64, error) {
 	input = strings.TrimSpace(input)
 
@@ -371,27 +372,46 @@ func ParseJumpTime(input string) (int64, error) {
 		return ts, nil
 	}
 
-	// Standard format: "20th January, 18:30 UTC" or "20th January 2026, 18:30 UTC"
+	var day, hour, minute, year int
+	var monthStr, yearStr string
+
+	// Day-first formats: "20th January, 18:30 UTC"
 	// Year group restricted to 2xxx to avoid consuming military time as year
-	standardPattern := regexp.MustCompile(`(?i)(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(2\d{3}))?,?\s+(\d{1,2})[:.](\d{2})\s*UTC`)
+	// Anchored with ^ to prevent substring matching
+	dayFirstStd := regexp.MustCompile(`(?i)^\s*(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(2\d{3}))?,?\s+(\d{1,2})[:.](\d{2})(?:\s*UTC)?`)
+	dayFirstMil := regexp.MustCompile(`(?i)^\s*(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(2\d{3}))?,?\s+(\d{2})(\d{2})(?:\s*UTC)?`)
 
-	// Military time: "9th Feb 1400 UTC" or "9th Feb 2026, 1400 UTC"
-	militaryPattern := regexp.MustCompile(`(?i)(\d{1,2})(?:st|nd|rd|th)?\s+(\w+)(?:\s+(2\d{3}))?,?\s+(\d{2})(\d{2})\s*UTC`)
+	// Month-first formats: "February 9th 19:30" or "February 9th 1930 UTC"
+	monthFirstStd := regexp.MustCompile(`(?i)^\s*(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(2\d{3}))?,?\s+(\d{1,2})[:.](\d{2})(?:\s*UTC)?`)
+	monthFirstMil := regexp.MustCompile(`(?i)^\s*(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(2\d{3}))?,?\s+(\d{2})(\d{2})(?:\s*UTC)?`)
 
-	matches := standardPattern.FindStringSubmatch(input)
-	if matches == nil {
-		matches = militaryPattern.FindStringSubmatch(input)
-	}
-
-	if matches == nil {
+	if matches := dayFirstStd.FindStringSubmatch(input); matches != nil {
+		day, _ = strconv.Atoi(matches[1])
+		monthStr = matches[2]
+		yearStr = matches[3]
+		hour, _ = strconv.Atoi(matches[4])
+		minute, _ = strconv.Atoi(matches[5])
+	} else if matches := dayFirstMil.FindStringSubmatch(input); matches != nil {
+		day, _ = strconv.Atoi(matches[1])
+		monthStr = matches[2]
+		yearStr = matches[3]
+		hour, _ = strconv.Atoi(matches[4])
+		minute, _ = strconv.Atoi(matches[5])
+	} else if matches := monthFirstStd.FindStringSubmatch(input); matches != nil {
+		monthStr = matches[1]
+		day, _ = strconv.Atoi(matches[2])
+		yearStr = matches[3]
+		hour, _ = strconv.Atoi(matches[4])
+		minute, _ = strconv.Atoi(matches[5])
+	} else if matches := monthFirstMil.FindStringSubmatch(input); matches != nil {
+		monthStr = matches[1]
+		day, _ = strconv.Atoi(matches[2])
+		yearStr = matches[3]
+		hour, _ = strconv.Atoi(matches[4])
+		minute, _ = strconv.Atoi(matches[5])
+	} else {
 		return 0, fmt.Errorf("invalid time format. Use: '20th January, 18:30 UTC' or '9th Feb 1400 UTC'")
 	}
-
-	day, _ := strconv.Atoi(matches[1])
-	monthStr := matches[2]
-	yearStr := matches[3]
-	hour, _ := strconv.Atoi(matches[4])
-	minute, _ := strconv.Atoi(matches[5])
 
 	// Parse month
 	month, err := parseMonth(monthStr)
@@ -400,8 +420,9 @@ func ParseJumpTime(input string) (int64, error) {
 	}
 
 	// Parse year (default to current year)
-	year := time.Now().UTC().Year()
-	if yearStr != "" {
+	if yearStr == "" {
+		year = time.Now().UTC().Year()
+	} else {
 		year, _ = strconv.Atoi(yearStr)
 	}
 

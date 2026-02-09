@@ -218,7 +218,7 @@ func isPlaceholder(s string) bool {
 
 	// Exact matches
 	switch lower {
-	case "", "[processing]", "[error]", "tbd", "tba", "n/a", "pending", "---", "???", "underway":
+	case "", "[processing]", "[error]", "tbd", "tba", "n/a", "pending", "---", "???", "underway", "jumping":
 		return true
 	}
 
@@ -227,6 +227,7 @@ func isPlaceholder(s string) bool {
 		strings.Contains(lower, "in progress") ||
 		strings.Contains(lower, "processing") ||
 		strings.Contains(lower, "pending") ||
+		strings.Contains(lower, "jumping") ||
 		strings.Contains(lower, "underway") {
 		return true
 	}

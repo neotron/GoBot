@@ -566,6 +566,15 @@ func TestParseJumpTime(t *testing.T) {
 		// Unix timestamp
 		{"unix timestamp", "1737399000", false},
 
+		// Month-first format
+		{"month first with colon", "February 9th 19:30", false},
+		{"month first no ordinal", "February 9 19:30", false},
+		{"month first with UTC", "February 9th 19:30 UTC", false},
+		{"month first military", "February 9th 1930", false},
+		{"month first military UTC", "February 9th 1930 UTC", false},
+		{"month first with year", "February 9th 2026, 19:30 UTC", false},
+		{"month first short", "Feb 9th 19:30", false},
+
 		// Invalid
 		{"random text", "sometime next week", true},
 		{"empty", "", true},
@@ -591,19 +600,49 @@ func TestParseJumpTime(t *testing.T) {
 	}
 }
 
-func TestParseJumpTime_MilitaryTimeValues(t *testing.T) {
-	// Verify "9th Feb 1400 UTC" and "9th Feb, 14:00 UTC" produce the same result
-	military, err := ParseJumpTime("9th Feb 1400 UTC")
-	if err != nil {
-		t.Fatalf("military time failed: %s", err)
+func TestParseJumpTime_EquivalentFormats(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+	}{
+		{"military vs standard", "9th Feb 1400 UTC", "9th Feb, 14:00 UTC"},
+		{"month-first vs day-first", "February 9th 19:30", "9th Feb, 19:30 UTC"},
+		{"month-first military vs standard", "Feb 9th 1930 UTC", "9th Feb, 19:30 UTC"},
 	}
 
-	standard, err := ParseJumpTime("9th Feb, 14:00 UTC")
-	if err != nil {
-		t.Fatalf("standard time failed: %s", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tsA, err := ParseJumpTime(tt.a)
+			if err != nil {
+				t.Fatalf("ParseJumpTime(%q) failed: %s", tt.a, err)
+			}
+			tsB, err := ParseJumpTime(tt.b)
+			if err != nil {
+				t.Fatalf("ParseJumpTime(%q) failed: %s", tt.b, err)
+			}
+			if tsA != tsB {
+				t.Errorf("%q=%d != %q=%d, should be equal", tt.a, tsA, tt.b, tsB)
+			}
+		})
+	}
+}
+
+func TestIsPlaceholder_Jumping(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"Jumping", true},
+		{"jumping", true},
+		{"Jumping now", true},
+		{"currently jumping", true},
 	}
 
-	if military != standard {
-		t.Errorf("military=%d != standard=%d, should be equal", military, standard)
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := isPlaceholder(tt.input); got != tt.want {
+				t.Errorf("isPlaceholder(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
 	}
 }
