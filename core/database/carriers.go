@@ -47,6 +47,25 @@ CREATE TABLE IF NOT EXISTS carrier_stats (
 );
 `
 
+// ProximityAlert represents a user's proximity alert for a carrier jump near a system
+type ProximityAlert struct {
+	ID         int64   `db:"id"`
+	UserID     string  `db:"user_id"`
+	SystemName string  `db:"system_name"`
+	DistanceLY float64 `db:"distance_ly"`
+	CreatedAt  int64   `db:"created_at"`
+}
+
+const proximityAlertSchema = `
+CREATE TABLE IF NOT EXISTS proximity_alerts (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id TEXT NOT NULL,
+	system_name TEXT NOT NULL,
+	distance_ly REAL NOT NULL,
+	created_at INTEGER NOT NULL
+);
+`
+
 // CarrierStats holds aggregated carrier activity statistics
 type CarrierStats struct {
 	Jumps          int     `db:"jumps"`
@@ -104,6 +123,11 @@ func InitializeCarrierTable() {
 	_, err = database.Exec(carrierStatsSchema)
 	if err != nil {
 		core.LogErrorF("Failed to create carrier_stats table: %s", err)
+	}
+
+	_, err = database.Exec(proximityAlertSchema)
+	if err != nil {
+		core.LogErrorF("Failed to create proximity_alerts table: %s", err)
 	}
 }
 
@@ -425,4 +449,83 @@ func GetCarrierStats(stationId string) (total CarrierStats, weekly CarrierStats)
 	}
 
 	return
+}
+
+// CreateProximityAlert creates a new proximity alert and returns its ID
+func CreateProximityAlert(userID, systemName string, distanceLY float64) (int64, error) {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec(`INSERT INTO proximity_alerts (user_id, system_name, distance_ly, created_at) VALUES (?, ?, ?, ?)`,
+			userID, systemName, distanceLY, time.Now().Unix())
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create proximity alert: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// FetchProximityAlertsByUser returns all proximity alerts for a given user
+func FetchProximityAlertsByUser(userID string) []ProximityAlert {
+	if database == nil {
+		return nil
+	}
+	var alerts []ProximityAlert
+	err := database.Select(&alerts, "SELECT * FROM proximity_alerts WHERE user_id = ? ORDER BY created_at DESC", userID)
+	if err != nil {
+		core.LogErrorF("Failed to fetch proximity alerts for user %s: %s", userID, err)
+		return nil
+	}
+	return alerts
+}
+
+// FetchAllProximityAlerts returns all active proximity alerts
+func FetchAllProximityAlerts() []ProximityAlert {
+	if database == nil {
+		return nil
+	}
+	var alerts []ProximityAlert
+	err := database.Select(&alerts, "SELECT * FROM proximity_alerts")
+	if err != nil {
+		core.LogErrorF("Failed to fetch all proximity alerts: %s", err)
+		return nil
+	}
+	return alerts
+}
+
+// DeleteProximityAlert deletes a specific alert owned by a user. Returns true if deleted.
+func DeleteProximityAlert(id int64, userID string) bool {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec("DELETE FROM proximity_alerts WHERE id = ? AND user_id = ?", id, userID)
+	})
+	if err != nil {
+		core.LogErrorF("Failed to delete proximity alert %d: %s", id, err)
+		return false
+	}
+	rows, _ := res.RowsAffected()
+	return rows > 0
+}
+
+// DeleteAllProximityAlerts deletes all alerts for a user. Returns the count deleted.
+func DeleteAllProximityAlerts(userID string) int64 {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec("DELETE FROM proximity_alerts WHERE user_id = ?", userID)
+	})
+	if err != nil {
+		core.LogErrorF("Failed to delete all proximity alerts for user %s: %s", userID, err)
+		return 0
+	}
+	rows, _ := res.RowsAffected()
+	return rows
+}
+
+// DeleteProximityAlertByID deletes a single alert by ID (used internally after firing)
+func DeleteProximityAlertByID(id int64) bool {
+	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
+		return tx.Exec("DELETE FROM proximity_alerts WHERE id = ?", id)
+	})
+	if err != nil {
+		core.LogErrorF("Failed to delete proximity alert by ID %d: %s", id, err)
+		return false
+	}
+	rows, _ := res.RowsAffected()
+	return rows > 0
 }

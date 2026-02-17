@@ -268,6 +268,9 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 	if changed {
 		core.LogInfoF("EDDN: %s - %s location changed to %s at %s [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
 
+		// Check proximity alerts
+		go CheckProximityAlerts(stationId, system)
+
 		// Record jump stats with distance
 		var jumpDist float64
 		if state != nil && state.CurrentSystem != nil {

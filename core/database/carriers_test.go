@@ -22,6 +22,12 @@ func setupTestDB(t *testing.T) func() {
 		t.Fatalf("Failed to create follower schema: %v", err)
 	}
 
+	// Create the proximity_alerts schema
+	_, err = db.Exec(proximityAlertSchema)
+	if err != nil {
+		t.Fatalf("Failed to create proximity_alerts schema: %v", err)
+	}
+
 	// Set the package-level database
 	database = db
 
@@ -288,5 +294,145 @@ func TestFetchRecentFollowers_SortByTimes(t *testing.T) {
 	}
 	if followers[0].TimesSeen != 4 {
 		t.Errorf("Expected MANY-001 to have 4 sightings, got %d", followers[0].TimesSeen)
+	}
+}
+
+func TestCreateProximityAlert(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id, err := CreateProximityAlert("user1", "Sol", 50.0)
+	if err != nil {
+		t.Fatalf("Failed to create proximity alert: %v", err)
+	}
+	if id <= 0 {
+		t.Errorf("Expected positive ID, got %d", id)
+	}
+}
+
+func TestFetchProximityAlertsByUser(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create alerts for two different users
+	CreateProximityAlert("user1", "Sol", 50.0)
+	CreateProximityAlert("user1", "Alpha Centauri", 100.0)
+	CreateProximityAlert("user2", "Sirius", 75.0)
+
+	// Verify user1 only sees their own alerts
+	alerts1 := FetchProximityAlertsByUser("user1")
+	if len(alerts1) != 2 {
+		t.Fatalf("Expected 2 alerts for user1, got %d", len(alerts1))
+	}
+	for _, a := range alerts1 {
+		if a.UserID != "user1" {
+			t.Errorf("Expected UserID='user1', got '%s'", a.UserID)
+		}
+	}
+
+	// Verify user2 only sees their own alerts
+	alerts2 := FetchProximityAlertsByUser("user2")
+	if len(alerts2) != 1 {
+		t.Fatalf("Expected 1 alert for user2, got %d", len(alerts2))
+	}
+	if alerts2[0].SystemName != "Sirius" {
+		t.Errorf("Expected SystemName='Sirius', got '%s'", alerts2[0].SystemName)
+	}
+}
+
+func TestFetchAllProximityAlerts(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	CreateProximityAlert("user1", "Sol", 50.0)
+	CreateProximityAlert("user2", "Alpha Centauri", 100.0)
+	CreateProximityAlert("user3", "Sirius", 75.0)
+
+	alerts := FetchAllProximityAlerts()
+	if len(alerts) != 3 {
+		t.Errorf("Expected 3 alerts total, got %d", len(alerts))
+	}
+}
+
+func TestDeleteProximityAlert(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id, _ := CreateProximityAlert("user1", "Sol", 50.0)
+
+	// Deleting another user's alert should return false
+	deleted := DeleteProximityAlert(id, "user2")
+	if deleted {
+		t.Error("Expected false when deleting another user's alert")
+	}
+
+	// Alert should still exist
+	alerts := FetchProximityAlertsByUser("user1")
+	if len(alerts) != 1 {
+		t.Fatalf("Expected alert to still exist, got %d alerts", len(alerts))
+	}
+
+	// Deleting own alert should return true
+	deleted = DeleteProximityAlert(id, "user1")
+	if !deleted {
+		t.Error("Expected true when deleting own alert")
+	}
+
+	// Alert should be gone
+	alerts = FetchProximityAlertsByUser("user1")
+	if len(alerts) != 0 {
+		t.Errorf("Expected 0 alerts after delete, got %d", len(alerts))
+	}
+}
+
+func TestDeleteAllProximityAlerts(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	CreateProximityAlert("user1", "Sol", 50.0)
+	CreateProximityAlert("user1", "Alpha Centauri", 100.0)
+	CreateProximityAlert("user1", "Sirius", 75.0)
+	// Another user's alert should not be affected
+	CreateProximityAlert("user2", "Barnards Star", 25.0)
+
+	count := DeleteAllProximityAlerts("user1")
+	if count != 3 {
+		t.Errorf("Expected 3 deleted, got %d", count)
+	}
+
+	// user1 should have no alerts
+	alerts := FetchProximityAlertsByUser("user1")
+	if len(alerts) != 0 {
+		t.Errorf("Expected 0 alerts for user1 after delete all, got %d", len(alerts))
+	}
+
+	// user2's alert should still exist
+	alerts2 := FetchProximityAlertsByUser("user2")
+	if len(alerts2) != 1 {
+		t.Errorf("Expected 1 alert for user2, got %d", len(alerts2))
+	}
+}
+
+func TestDeleteProximityAlertByID(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id, _ := CreateProximityAlert("user1", "Sol", 50.0)
+
+	deleted := DeleteProximityAlertByID(id)
+	if !deleted {
+		t.Error("Expected true when deleting existing alert by ID")
+	}
+
+	// Alert should be gone
+	alerts := FetchProximityAlertsByUser("user1")
+	if len(alerts) != 0 {
+		t.Errorf("Expected 0 alerts after delete, got %d", len(alerts))
+	}
+
+	// Deleting again should return false
+	deleted = DeleteProximityAlertByID(id)
+	if deleted {
+		t.Error("Expected false when deleting non-existent alert")
 	}
 }

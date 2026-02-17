@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"GoBot/core"
+	"GoBot/core/database"
 	"GoBot/core/services"
 
 	"github.com/bwmarrin/discordgo"
@@ -166,6 +169,40 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 				Description:  "Carrier station ID",
 				Required:     true,
 				Autocomplete: true,
+			},
+		},
+	},
+	{
+		Name:        "carrieralert",
+		Description: "Get a DM when any fleet carrier jumps near a system",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "system",
+				Description: "Target system name",
+				Required:    true,
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionNumber,
+				Name:        "distance",
+				Description: "Alert distance in light years",
+				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        "carrieralerts",
+		Description: "List your active carrier proximity alerts",
+	},
+	{
+		Name:        "carrieralertclear",
+		Description: "Remove a carrier proximity alert (or all)",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "id",
+				Description: "Alert ID to remove (omit to clear all)",
+				Required:    false,
 			},
 		},
 	},
@@ -349,6 +386,60 @@ func handleCarrierSlashAppCommand(s *discordgo.Session, i *discordgo.Interaction
 		stationId := strings.ToUpper(data.Options[0].StringValue())
 		output := services.FormatCarrierInfo(stationId)
 		respond(s, i, output, true)
+
+	case "carrieralert":
+		systemName := data.Options[0].StringValue()
+		distance := data.Options[1].FloatValue()
+
+		if distance <= 0 {
+			respond(s, i, "**Error:** Distance must be greater than 0.", true)
+			return
+		}
+
+		// Validate system exists in EDSM
+		coords, err := services.GetSystemCoords(systemName)
+		if err != nil || coords == nil {
+			respond(s, i, fmt.Sprintf("**Error:** System **%s** not found in EDSM.", systemName), true)
+			return
+		}
+
+		alertID, err := database.CreateProximityAlert(userID, systemName, distance)
+		if err != nil {
+			respond(s, i, "**Error:** Failed to create alert: "+err.Error(), true)
+			return
+		}
+		respond(s, i, fmt.Sprintf("Proximity alert #%d created: you'll be DM'd when any fleet carrier jumps within **%.1f ly** of **%s**.", alertID, distance, systemName), true)
+
+	case "carrieralerts":
+		alerts := database.FetchProximityAlertsByUser(userID)
+		if len(alerts) == 0 {
+			respond(s, i, "You have no active proximity alerts.", true)
+			return
+		}
+		var sb strings.Builder
+		sb.WriteString("**Your Proximity Alerts:**\n")
+		for _, a := range alerts {
+			created := time.Unix(a.CreatedAt, 0).UTC().Format("2006-01-02 15:04 UTC")
+			sb.WriteString(fmt.Sprintf("• **#%d** — %s (within %.1f ly) — created %s\n", a.ID, a.SystemName, a.DistanceLY, created))
+		}
+		respond(s, i, sb.String(), true)
+
+	case "carrieralertclear":
+		if len(data.Options) > 0 {
+			alertID := data.Options[0].IntValue()
+			if database.DeleteProximityAlert(alertID, userID) {
+				respond(s, i, fmt.Sprintf("Proximity alert #%d removed.", alertID), true)
+			} else {
+				respond(s, i, fmt.Sprintf("**Error:** Alert #%d not found or not yours.", alertID), true)
+			}
+		} else {
+			count := database.DeleteAllProximityAlerts(userID)
+			if count == 0 {
+				respond(s, i, "You have no proximity alerts to clear.", true)
+			} else {
+				respond(s, i, fmt.Sprintf("Cleared %d proximity alert(s).", count), true)
+			}
+		}
 	}
 }
 
