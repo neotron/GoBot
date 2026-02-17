@@ -51,6 +51,7 @@ type JournalMessage struct {
 	// For CarrierJumpRequest events
 	DepartureTime string `json:"DepartureTime,omitempty"` // ISO 8601 scheduled departure
 }
+
 // carrierCallsigns maps our carrier station IDs for quick lookup
 var carrierCallsigns map[string]bool
 
@@ -268,9 +269,6 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 	if changed {
 		core.LogInfoF("EDDN: %s - %s location changed to %s at %s [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
 
-		// Check proximity alerts
-		go CheckProximityAlerts(stationId, system)
-
 		// Record jump stats with distance
 		var jumpDist float64
 		if state != nil && state.CurrentSystem != nil {
@@ -294,6 +292,9 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 			database.UpdateCarrierJumpTime(stationId, &eventTime)
 		}
 		PostCarrierFlightLog(stationId, []string{"location: " + system})
+
+		// Check proximity alerts after all DB writes are complete to avoid SQLite lock contention
+		go CheckProximityAlerts(stationId, system)
 	} else {
 		core.LogDebugF("EDDN: %s - %s location confirmed at %s (%s) [%s]", eventType, getCarrierDisplayName(stationId), system, eventTimeStr, uploaderID)
 	}
