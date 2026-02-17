@@ -28,6 +28,11 @@ func CheckProximityAlerts(stationId, system string) {
 	carrierName := getCarrierDisplayName(stationId)
 
 	for _, alert := range alerts {
+		// Skip if alert is filtered to a specific carrier that doesn't match
+		if alert.CarrierID != "" && alert.CarrierID != stationId {
+			continue
+		}
+
 		alertCoords, err := GetSystemCoords(alert.SystemName)
 		if err != nil || alertCoords == nil {
 			continue

@@ -301,12 +301,44 @@ func TestCreateProximityAlert(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, err := CreateProximityAlert("user1", "Sol", 50.0)
+	id, err := CreateProximityAlert("user1", "Sol", 50.0, "")
 	if err != nil {
 		t.Fatalf("Failed to create proximity alert: %v", err)
 	}
 	if id <= 0 {
 		t.Errorf("Expected positive ID, got %d", id)
+	}
+
+	// Test with carrier filter
+	id2, err := CreateProximityAlert("user1", "Alpha Centauri", 100.0, "XYZ-123")
+	if err != nil {
+		t.Fatalf("Failed to create carrier-filtered proximity alert: %v", err)
+	}
+	if id2 <= id {
+		t.Errorf("Expected id2 > id, got id=%d id2=%d", id, id2)
+	}
+
+	// Verify carrier ID was stored
+	alerts := FetchProximityAlertsByUser("user1")
+	if len(alerts) != 2 {
+		t.Fatalf("Expected 2 alerts, got %d", len(alerts))
+	}
+	// Alerts are ordered by created_at DESC, so newest first
+	foundFiltered := false
+	foundAll := false
+	for _, a := range alerts {
+		if a.CarrierID == "XYZ-123" {
+			foundFiltered = true
+		}
+		if a.CarrierID == "" {
+			foundAll = true
+		}
+	}
+	if !foundFiltered {
+		t.Error("Expected to find alert with CarrierID='XYZ-123'")
+	}
+	if !foundAll {
+		t.Error("Expected to find alert with empty CarrierID (all carriers)")
 	}
 }
 
@@ -315,9 +347,9 @@ func TestFetchProximityAlertsByUser(t *testing.T) {
 	defer cleanup()
 
 	// Create alerts for two different users
-	CreateProximityAlert("user1", "Sol", 50.0)
-	CreateProximityAlert("user1", "Alpha Centauri", 100.0)
-	CreateProximityAlert("user2", "Sirius", 75.0)
+	CreateProximityAlert("user1", "Sol", 50.0, "")
+	CreateProximityAlert("user1", "Alpha Centauri", 100.0, "")
+	CreateProximityAlert("user2", "Sirius", 75.0, "")
 
 	// Verify user1 only sees their own alerts
 	alerts1 := FetchProximityAlertsByUser("user1")
@@ -344,9 +376,9 @@ func TestFetchAllProximityAlerts(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	CreateProximityAlert("user1", "Sol", 50.0)
-	CreateProximityAlert("user2", "Alpha Centauri", 100.0)
-	CreateProximityAlert("user3", "Sirius", 75.0)
+	CreateProximityAlert("user1", "Sol", 50.0, "")
+	CreateProximityAlert("user2", "Alpha Centauri", 100.0, "ABC-001")
+	CreateProximityAlert("user3", "Sirius", 75.0, "")
 
 	alerts := FetchAllProximityAlerts()
 	if len(alerts) != 3 {
@@ -354,11 +386,42 @@ func TestFetchAllProximityAlerts(t *testing.T) {
 	}
 }
 
+func TestProximityAlertCarrierFilter(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create alerts: one for all carriers, one for a specific carrier
+	CreateProximityAlert("user1", "Sol", 50.0, "")
+	CreateProximityAlert("user1", "Alpha Centauri", 100.0, "XYZ-999")
+	CreateProximityAlert("user2", "Sirius", 75.0, "ABC-001")
+
+	alerts := FetchAllProximityAlerts()
+	if len(alerts) != 3 {
+		t.Fatalf("Expected 3 alerts, got %d", len(alerts))
+	}
+
+	// Verify CarrierID values are stored and returned correctly
+	carrierIDs := make(map[string]string) // systemName -> carrierID
+	for _, a := range alerts {
+		carrierIDs[a.SystemName] = a.CarrierID
+	}
+
+	if carrierIDs["Sol"] != "" {
+		t.Errorf("Expected Sol alert to have empty CarrierID, got '%s'", carrierIDs["Sol"])
+	}
+	if carrierIDs["Alpha Centauri"] != "XYZ-999" {
+		t.Errorf("Expected Alpha Centauri alert CarrierID='XYZ-999', got '%s'", carrierIDs["Alpha Centauri"])
+	}
+	if carrierIDs["Sirius"] != "ABC-001" {
+		t.Errorf("Expected Sirius alert CarrierID='ABC-001', got '%s'", carrierIDs["Sirius"])
+	}
+}
+
 func TestDeleteProximityAlert(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := CreateProximityAlert("user1", "Sol", 50.0)
+	id, _ := CreateProximityAlert("user1", "Sol", 50.0, "")
 
 	// Deleting another user's alert should return false
 	deleted := DeleteProximityAlert(id, "user2")
@@ -389,11 +452,11 @@ func TestDeleteAllProximityAlerts(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	CreateProximityAlert("user1", "Sol", 50.0)
-	CreateProximityAlert("user1", "Alpha Centauri", 100.0)
-	CreateProximityAlert("user1", "Sirius", 75.0)
+	CreateProximityAlert("user1", "Sol", 50.0, "")
+	CreateProximityAlert("user1", "Alpha Centauri", 100.0, "")
+	CreateProximityAlert("user1", "Sirius", 75.0, "")
 	// Another user's alert should not be affected
-	CreateProximityAlert("user2", "Barnards Star", 25.0)
+	CreateProximityAlert("user2", "Barnards Star", 25.0, "")
 
 	count := DeleteAllProximityAlerts("user1")
 	if count != 3 {
@@ -417,7 +480,7 @@ func TestDeleteProximityAlertByID(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := CreateProximityAlert("user1", "Sol", 50.0)
+	id, _ := CreateProximityAlert("user1", "Sol", 50.0, "")
 
 	deleted := DeleteProximityAlertByID(id)
 	if !deleted {

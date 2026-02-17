@@ -53,6 +53,7 @@ type ProximityAlert struct {
 	UserID     string  `db:"user_id"`
 	SystemName string  `db:"system_name"`
 	DistanceLY float64 `db:"distance_ly"`
+	CarrierID  string  `db:"carrier_id"`
 	CreatedAt  int64   `db:"created_at"`
 }
 
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS proximity_alerts (
 	user_id TEXT NOT NULL,
 	system_name TEXT NOT NULL,
 	distance_ly REAL NOT NULL,
+	carrier_id TEXT NOT NULL DEFAULT '',
 	created_at INTEGER NOT NULL
 );
 `
@@ -129,6 +131,9 @@ func InitializeCarrierTable() {
 	if err != nil {
 		core.LogErrorF("Failed to create proximity_alerts table: %s", err)
 	}
+
+	// Migration: add carrier_id column to existing proximity_alerts tables
+	_, _ = database.Exec("ALTER TABLE proximity_alerts ADD COLUMN carrier_id TEXT NOT NULL DEFAULT ''")
 }
 
 // FetchCarrierState gets the current state for a carrier
@@ -451,11 +456,12 @@ func GetCarrierStats(stationId string) (total CarrierStats, weekly CarrierStats)
 	return
 }
 
-// CreateProximityAlert creates a new proximity alert and returns its ID
-func CreateProximityAlert(userID, systemName string, distanceLY float64) (int64, error) {
+// CreateProximityAlert creates a new proximity alert and returns its ID.
+// carrierID filters to a specific carrier; empty string means all carriers.
+func CreateProximityAlert(userID, systemName string, distanceLY float64, carrierID string) (int64, error) {
 	res, err := executeAndCommit(func(tx *sql.Tx) (sql.Result, error) {
-		return tx.Exec(`INSERT INTO proximity_alerts (user_id, system_name, distance_ly, created_at) VALUES (?, ?, ?, ?)`,
-			userID, systemName, distanceLY, time.Now().Unix())
+		return tx.Exec(`INSERT INTO proximity_alerts (user_id, system_name, distance_ly, carrier_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+			userID, systemName, distanceLY, carrierID, time.Now().Unix())
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create proximity alert: %w", err)

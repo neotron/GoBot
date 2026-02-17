@@ -188,6 +188,13 @@ var carrierSlashCommands = []*discordgo.ApplicationCommand{
 				Description: "Alert distance in light years",
 				Required:    true,
 			},
+			{
+				Type:         discordgo.ApplicationCommandOptionString,
+				Name:         "carrier",
+				Description:  "Specific carrier to watch (omit for all carriers)",
+				Required:     false,
+				Autocomplete: true,
+			},
 		},
 	},
 	{
@@ -391,6 +398,12 @@ func handleCarrierSlashAppCommand(s *discordgo.Session, i *discordgo.Interaction
 		systemName := data.Options[0].StringValue()
 		distance := data.Options[1].FloatValue()
 
+		// Optional carrier filter
+		carrierID := ""
+		if len(data.Options) > 2 {
+			carrierID = strings.ToUpper(data.Options[2].StringValue())
+		}
+
 		if distance <= 0 {
 			respond(s, i, "**Error:** Distance must be greater than 0.", true)
 			return
@@ -403,12 +416,21 @@ func handleCarrierSlashAppCommand(s *discordgo.Session, i *discordgo.Interaction
 			return
 		}
 
-		alertID, err := database.CreateProximityAlert(userID, systemName, distance)
+		alertID, err := database.CreateProximityAlert(userID, systemName, distance, carrierID)
 		if err != nil {
 			respond(s, i, "**Error:** Failed to create alert: "+err.Error(), true)
 			return
 		}
-		respond(s, i, fmt.Sprintf("Proximity alert #%d created: you'll be DM'd when any fleet carrier jumps within **%.1f ly** of **%s**.", alertID, distance, systemName), true)
+
+		carrierDesc := "any fleet carrier"
+		if carrierID != "" {
+			if cfg := core.Settings.GetCarrierByStationId(carrierID); cfg != nil {
+				carrierDesc = fmt.Sprintf("%s (%s)", cfg.Name, carrierID)
+			} else {
+				carrierDesc = carrierID
+			}
+		}
+		respond(s, i, fmt.Sprintf("Proximity alert #%d created: you'll be DM'd when %s jumps within **%.1f ly** of **%s**.", alertID, carrierDesc, distance, systemName), true)
 
 	case "carrieralerts":
 		alerts := database.FetchProximityAlertsByUser(userID)
@@ -420,7 +442,15 @@ func handleCarrierSlashAppCommand(s *discordgo.Session, i *discordgo.Interaction
 		sb.WriteString("**Your Proximity Alerts:**\n")
 		for _, a := range alerts {
 			created := time.Unix(a.CreatedAt, 0).UTC().Format("2006-01-02 15:04 UTC")
-			sb.WriteString(fmt.Sprintf("• **#%d** — %s (within %.1f ly) — created %s\n", a.ID, a.SystemName, a.DistanceLY, created))
+			carrierFilter := "all carriers"
+			if a.CarrierID != "" {
+				if cfg := core.Settings.GetCarrierByStationId(a.CarrierID); cfg != nil {
+					carrierFilter = fmt.Sprintf("carrier: %s", cfg.Name)
+				} else {
+					carrierFilter = fmt.Sprintf("carrier: %s", a.CarrierID)
+				}
+			}
+			sb.WriteString(fmt.Sprintf("• **#%d** — %s (within %.1f ly, %s) — created %s\n", a.ID, a.SystemName, a.DistanceLY, carrierFilter, created))
 		}
 		respond(s, i, sb.String(), true)
 
