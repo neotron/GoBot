@@ -250,9 +250,9 @@ func TestParseCarrierUpdates_DepartureCleared(t *testing.T) {
 	tests := []struct {
 		name      string
 		departure string
-		wantNil   bool  // true if departure should not be set
-		wantZero  bool  // true if departure should be 0 (cleared)
-		wantGt0   bool  // true if departure should be > 0 (parsed time)
+		wantNil   bool // true if departure should not be set
+		wantZero  bool // true if departure should be 0 (cleared)
+		wantGt0   bool // true if departure should be > 0 (parsed time)
 	}{
 		{"tbd", "TBD", false, true, false},
 		{"tba", "tba", false, true, false},
@@ -575,6 +575,15 @@ func TestParseJumpTime(t *testing.T) {
 		{"month first with year", "February 9th 2026, 19:30 UTC", false},
 		{"month first short", "Feb 9th 19:30", false},
 
+		// Day-of-week prefix
+		{"day-of-week day first", "Friday 20th Feb, 08.30 UTC", false},
+		{"day-of-week month first", "Friday February 20th, 08:30 UTC", false},
+
+		// No month (assumes current month)
+		{"day-of-week no month", "Friday 20th, 08.30 UTC", false},
+		{"day only no month", "20th, 08:30 UTC", false},
+		{"day only military", "20th 1400 UTC", false},
+
 		// Invalid
 		{"random text", "sometime next week", true},
 		{"empty", "", true},
@@ -608,6 +617,7 @@ func TestParseJumpTime_EquivalentFormats(t *testing.T) {
 		{"military vs standard", "9th Feb 1400 UTC", "9th Feb, 14:00 UTC"},
 		{"month-first vs day-first", "February 9th 19:30", "9th Feb, 19:30 UTC"},
 		{"month-first military vs standard", "Feb 9th 1930 UTC", "9th Feb, 19:30 UTC"},
+		{"day-of-week stripped", "Friday 20th Feb, 08:30 UTC", "20th Feb, 08:30 UTC"},
 	}
 
 	for _, tt := range tests {

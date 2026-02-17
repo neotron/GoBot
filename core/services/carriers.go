@@ -372,6 +372,10 @@ func ParseJumpTime(input string) (int64, error) {
 		return ts, nil
 	}
 
+	// Strip leading day-of-week names (e.g., "Friday 20th, ..." -> "20th, ...")
+	dowPrefix := regexp.MustCompile(`(?i)^\s*(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+`)
+	input = dowPrefix.ReplaceAllString(input, "")
+
 	var day, hour, minute, year int
 	var monthStr, yearStr string
 
@@ -384,6 +388,10 @@ func ParseJumpTime(input string) (int64, error) {
 	// Month-first formats: "February 9th 19:30" or "February 9th 1930 UTC"
 	monthFirstStd := regexp.MustCompile(`(?i)^\s*(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(2\d{3}))?,?\s+(\d{1,2})[:.](\d{2})(?:\s*UTC)?`)
 	monthFirstMil := regexp.MustCompile(`(?i)^\s*(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(2\d{3}))?,?\s+(\d{2})(\d{2})(?:\s*UTC)?`)
+
+	// Day-only formats (no month): "20th, 08:30 UTC" — assumes current month
+	dayOnlyStd := regexp.MustCompile(`(?i)^\s*(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{1,2})[:.](\d{2})(?:\s*UTC)?`)
+	dayOnlyMil := regexp.MustCompile(`(?i)^\s*(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2})(\d{2})(?:\s*UTC)?`)
 
 	if matches := dayFirstStd.FindStringSubmatch(input); matches != nil {
 		day, _ = strconv.Atoi(matches[1])
@@ -409,14 +417,28 @@ func ParseJumpTime(input string) (int64, error) {
 		yearStr = matches[3]
 		hour, _ = strconv.Atoi(matches[4])
 		minute, _ = strconv.Atoi(matches[5])
+	} else if matches := dayOnlyStd.FindStringSubmatch(input); matches != nil {
+		day, _ = strconv.Atoi(matches[1])
+		hour, _ = strconv.Atoi(matches[2])
+		minute, _ = strconv.Atoi(matches[3])
+	} else if matches := dayOnlyMil.FindStringSubmatch(input); matches != nil {
+		day, _ = strconv.Atoi(matches[1])
+		hour, _ = strconv.Atoi(matches[2])
+		minute, _ = strconv.Atoi(matches[3])
 	} else {
 		return 0, fmt.Errorf("invalid time format. Use: '20th January, 18:30 UTC' or '9th Feb 1400 UTC'")
 	}
 
-	// Parse month
-	month, err := parseMonth(monthStr)
-	if err != nil {
-		return 0, err
+	// Parse month (default to current month if not specified)
+	var month time.Month
+	if monthStr == "" {
+		month = time.Now().UTC().Month()
+	} else {
+		var err error
+		month, err = parseMonth(monthStr)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	// Parse year (default to current year)
