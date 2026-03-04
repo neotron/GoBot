@@ -27,7 +27,8 @@ var (
 	systemCoordsCache   = make(map[string]*SystemCoords)
 	systemCoordsCacheMu sync.RWMutex
 	systemCacheExpiry   = make(map[string]time.Time)
-	cacheDuration       = 24 * time.Hour // Cache coords for 24 hours
+	cacheDuration         = 24 * time.Hour   // Cache coords for 24 hours
+	negativeCacheDuration = 1 * time.Minute // Cache unknown systems briefly
 
 	edsmClient = &http.Client{Timeout: 10 * time.Second}
 )
@@ -74,7 +75,7 @@ func GetSystemCoords(systemName string) (*SystemCoords, error) {
 		// System not found - cache nil result
 		systemCoordsCacheMu.Lock()
 		systemCoordsCache[systemName] = nil
-		systemCacheExpiry[systemName] = time.Now().Add(cacheDuration)
+		systemCacheExpiry[systemName] = time.Now().Add(negativeCacheDuration)
 		systemCoordsCacheMu.Unlock()
 		return nil, nil
 	}
@@ -85,10 +86,10 @@ func GetSystemCoords(systemName string) (*SystemCoords, error) {
 	}
 
 	if system.Coords == nil {
-		// System exists but not trilaterated - cache nil result too
+		// System exists but not trilaterated - cache nil result briefly
 		systemCoordsCacheMu.Lock()
 		systemCoordsCache[systemName] = nil
-		systemCacheExpiry[systemName] = time.Now().Add(cacheDuration)
+		systemCacheExpiry[systemName] = time.Now().Add(negativeCacheDuration)
 		systemCoordsCacheMu.Unlock()
 		return nil, nil
 	}

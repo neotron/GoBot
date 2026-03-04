@@ -302,12 +302,6 @@ func updateCarrierFromEDDN(stationId, system, timestamp, eventType, uploaderID s
 
 // isLocationSuspicious checks if a location update should require validation
 func isLocationSuspicious(stationId, newSystem string, state *database.CarrierState, eventTime int64) (bool, string) {
-	// Check 1: Is the system known in EDSM? (always checked)
-	coords, err := GetSystemCoords(newSystem)
-	if err != nil || coords == nil {
-		return true, "unknown system"
-	}
-
 	if state == nil || state.CurrentSystem == nil {
 		return false, "" // First location, accept it
 	}
@@ -323,6 +317,12 @@ func isLocationSuspicious(stationId, newSystem string, state *database.CarrierSt
 	}
 
 	// From here on, the location is actually changing
+
+	// Check 1: Is the system known in EDSM?
+	coords, err := GetSystemCoords(newSystem)
+	if err != nil || coords == nil {
+		return true, "unknown system"
+	}
 
 	// Check 2: Is the distance reasonable? (< 500ly) - only if "range" validation enabled
 	if core.Settings.CarrierValidationEnabled("range") {
@@ -363,8 +363,11 @@ func handleSuspiciousLocation(stationId, system string, eventTime int64, eventTy
 			// Enough validations, apply the update
 			core.LogInfoF("EDDN: %s - %s location validated and changed to %s [%s]", eventType, getCarrierDisplayName(stationId), system, uploaderID)
 			core.LogDebugF("Carrier %s: location set to %q (source: EDDN validated suspicious)", stationId, system)
-			database.UpdateCarrierLocation(stationId, system, "", eventTime)
-			PostCarrierFlightLog(stationId, []string{"location: " + system + " (validated)"})
+			_, changed := database.UpdateCarrierLocation(stationId, system, "", eventTime)
+			if changed {
+				PostCarrierFlightLog(stationId, []string{"location: " + system + " (validated)"})
+				go CheckProximityAlerts(stationId, system)
+			}
 			delete(suspiciousLocations, stationId)
 		}
 		return
