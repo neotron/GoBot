@@ -55,11 +55,16 @@ func ProcessCarrierUpdateMessage(authorId, channelId, content string) {
 		return
 	}
 
+	core.LogDebugF("Carrier update message from %s (%d chars)", authorId, len(content))
+
 	// Parse carrier updates from message
 	updates := ParseCarrierUpdates(content)
 	if len(updates) == 0 {
+		core.LogDebugF("No carrier updates parsed from message by %s", authorId)
 		return
 	}
+
+	core.LogDebugF("Parsed %d carrier update(s) from message by %s", len(updates), authorId)
 
 	// Process each carrier update
 	for _, update := range updates {
@@ -106,8 +111,11 @@ func ParseCarrierUpdates(content string) []CarrierUpdate {
 	indices := carrierPattern.FindAllStringIndex(content, -1)
 
 	if len(indices) == 0 {
+		core.LogDebugF("No 'Carrier:' markers found in message")
 		return updates
 	}
+
+	core.LogDebugF("Found %d 'Carrier:' block(s) in message", len(indices))
 
 	for i, idx := range indices {
 		// Extract block from this "Carrier:" to the next one (or end)
@@ -144,9 +152,11 @@ func parseCarrierBlock(block string) *CarrierUpdate {
 	if stationIdMatch != "" {
 		// Found station ID pattern
 		if core.Settings.GetCarrierByStationId(stationIdMatch) == nil {
+			core.LogWarnF("Carrier block ignored: station ID %s not in config (line: %q)", stationIdMatch, firstLine)
 			return nil
 		}
 		stationId = stationIdMatch
+		core.LogDebugF("Carrier block matched by station ID: %s", stationId)
 	} else {
 		// No station ID, try to match by carrier name
 		// "Carrier: DSEV Odysseus" -> extract "DSEV Odysseus"
@@ -159,9 +169,11 @@ func parseCarrierBlock(block string) *CarrierUpdate {
 
 		cfg := findCarrierByName(carrierName)
 		if cfg == nil {
+			core.LogWarnF("Carrier block ignored: no station ID and name %q not in config", carrierName)
 			return nil
 		}
 		stationId = cfg.StationId
+		core.LogDebugF("Carrier block matched by name %q -> station ID %s", carrierName, stationId)
 	}
 
 	update := &CarrierUpdate{
@@ -180,14 +192,16 @@ func parseCarrierBlock(block string) *CarrierUpdate {
 			timeStr := strings.TrimSpace(match[1])
 			// Check if this indicates clearing the departure
 			if isClearValue(timeStr) || isPlaceholder(timeStr) {
+				core.LogDebugF("Carrier %s: departure %q treated as clear/placeholder", stationId, timeStr)
 				zero := int64(0)
 				update.Departure = &zero // 0 = clear
 			} else {
 				// Try to parse as a time
 				if ts, err := ParseJumpTime(timeStr); err == nil {
+					core.LogDebugF("Carrier %s: parsed departure %q -> %d", stationId, timeStr, ts)
 					update.Departure = &ts
 				} else {
-					core.LogDebugF("Failed to parse departure time '%s', clearing: %s", timeStr, err)
+					core.LogWarnF("Carrier %s: failed to parse departure %q (%s), clearing field", stationId, timeStr, err)
 					zero := int64(0)
 					update.Departure = &zero // 0 = clear unparseable departure
 				}
@@ -200,13 +214,19 @@ func parseCarrierBlock(block string) *CarrierUpdate {
 			destStr := strings.TrimSpace(match[1])
 			// Clear destination if placeholder/invalid, otherwise set it
 			if isClearValue(destStr) || isPlaceholder(destStr) {
+				core.LogDebugF("Carrier %s: destination %q treated as clear/placeholder", stationId, destStr)
 				empty := ""
 				update.Destination = &empty // empty = clear
 			} else {
+				core.LogDebugF("Carrier %s: parsed destination %q", stationId, destStr)
 				update.Destination = &destStr
 			}
 			continue
 		}
+	}
+
+	if update.Departure == nil && update.Destination == nil {
+		core.LogDebugF("Carrier %s: block had no Departure or Destination fields", stationId)
 	}
 
 	return update
@@ -348,14 +368,18 @@ func processCarrierUpdate(update *CarrierUpdate) {
 					core.LogInfoF("Channel update: Carrier %s jump time cleared", update.StationId)
 					changes = append(changes, "jump time cleared")
 				}
+			} else {
+				core.LogDebugF("Carrier %s: jump time already clear, no-op", update.StationId)
 			}
 		} else if *update.Departure != currentJump {
 			if err := SetCarrierJumpTime(update.StationId, *update.Departure); err != nil {
 				core.LogErrorF("Failed to set jump time for %s: %s", update.StationId, err)
 			} else {
-				core.LogInfoF("Channel update: Carrier %s jump time set to %d", update.StationId, *update.Departure)
+				core.LogInfoF("Channel update: Carrier %s jump time set to %d (was %d)", update.StationId, *update.Departure, currentJump)
 				changes = append(changes, "jump time updated")
 			}
+		} else {
+			core.LogDebugF("Carrier %s: jump time unchanged (%d), no-op", update.StationId, currentJump)
 		}
 	}
 
@@ -375,6 +399,8 @@ func processCarrierUpdate(update *CarrierUpdate) {
 					core.LogInfoF("Channel update: Carrier %s destination cleared", update.StationId)
 					changes = append(changes, "destination cleared")
 				}
+			} else {
+				core.LogDebugF("Carrier %s: destination already clear, no-op", update.StationId)
 			}
 		} else if *update.Destination != currentDest {
 			// Set destination (no EDSM validation required — non-system names like
@@ -382,9 +408,11 @@ func processCarrierUpdate(update *CarrierUpdate) {
 			if err := SetCarrierDestination(update.StationId, *update.Destination); err != nil {
 				core.LogErrorF("Failed to set destination for %s: %s", update.StationId, err)
 			} else {
-				core.LogInfoF("Channel update: Carrier %s destination set to %s", update.StationId, *update.Destination)
+				core.LogInfoF("Channel update: Carrier %s destination set to %q (was %q)", update.StationId, *update.Destination, currentDest)
 				changes = append(changes, "destination updated")
 			}
+		} else {
+			core.LogDebugF("Carrier %s: destination unchanged (%q), no-op", update.StationId, currentDest)
 		}
 	}
 
