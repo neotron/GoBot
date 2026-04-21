@@ -21,9 +21,10 @@ var (
 	// Matches station ID pattern: XXX-XXX (3 alphanumeric, dash, 3 alphanumeric)
 	stationIdPattern = regexp.MustCompile(`[A-Z0-9]{3}-[A-Z0-9]{3}`)
 
-	// Line patterns for extracting fields
-	departurePattern   = regexp.MustCompile(`(?i)^Departure:\s*(.+)$`)
-	destinationPattern = regexp.MustCompile(`(?i)^Destination(?:\s*System)?:\s*(.+)$`)
+	// Line patterns for extracting fields. Allow a common modifier word after
+	// the field name (e.g. "Departure Date:", "Departure Time:").
+	departurePattern   = regexp.MustCompile(`(?i)^Departure(?:\s+(?:Date|Time))?:\s*(.+)$`)
+	destinationPattern = regexp.MustCompile(`(?i)^Destination(?:\s+System)?:\s*(.+)$`)
 
 	// Matches the sector + mass code part of a procedurally generated system name
 	// e.g. "MT-Q e5-8" in "Thuecheae MT-Q e5-8"

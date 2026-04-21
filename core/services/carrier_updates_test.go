@@ -379,6 +379,60 @@ Departure: tbd`
 	}
 }
 
+func TestParseCarrierUpdates_FieldNameVariants(t *testing.T) {
+	setupTestCarriers()
+
+	tests := []struct {
+		name    string
+		content string
+		wantDep bool // true if Departure should be set
+		wantDst bool // true if Destination should be set
+	}{
+		{
+			name:    "Departure Date",
+			content: "Carrier: Pillar of Chista TBQ-6VX\nDeparture Date: 21st April 17:30 UTC",
+			wantDep: true,
+		},
+		{
+			name:    "Departure Time",
+			content: "Carrier: Pillar of Chista TBQ-6VX\nDeparture Time: 21st April 17:30 UTC",
+			wantDep: true,
+		},
+		{
+			name:    "plain Departure",
+			content: "Carrier: Pillar of Chista TBQ-6VX\nDeparture: 21st April 17:30 UTC",
+			wantDep: true,
+		},
+		{
+			name:    "Destination System",
+			content: "Carrier: Pillar of Chista TBQ-6VX\nDestination System: Sol",
+			wantDst: true,
+		},
+		{
+			name:    "plain Destination",
+			content: "Carrier: Pillar of Chista TBQ-6VX\nDestination: Sol",
+			wantDst: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updates := ParseCarrierUpdates(tt.content)
+			if len(updates) != 1 {
+				t.Fatalf("expected 1 update, got %d", len(updates))
+			}
+			gotDep := updates[0].Departure != nil
+			gotDst := updates[0].Destination != nil
+			if gotDep != tt.wantDep {
+				t.Errorf("Departure set=%v, want %v", gotDep, tt.wantDep)
+			}
+			if gotDst != tt.wantDst {
+				t.Errorf("Destination set=%v, want %v", gotDst, tt.wantDst)
+			}
+		})
+	}
+}
+
 func TestParseCarrierUpdates_MatchByName(t *testing.T) {
 	setupTestCarriers()
 
