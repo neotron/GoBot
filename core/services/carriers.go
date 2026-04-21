@@ -15,6 +15,11 @@ import (
 
 var discordSession *discordgo.Session
 
+// Matches an optional leading weekday token with trailing comma/whitespace
+// (e.g. "Thursday, ", "Thu ", "Monday ") so ParseJumpTime can skip it.
+// Long names precede short ones so RE2's leftmost-first alternation picks them.
+var weekdayPrefixPattern = regexp.MustCompile(`(?i)^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\.?,?\s+`)
+
 // SetDiscordSession sets the Discord session for posting flight logs
 func SetDiscordSession(s *discordgo.Session) {
 	discordSession = s
@@ -364,6 +369,8 @@ func GetCarrierStationIds() []string {
 //   - "20th January, 18:30 UTC" or "20th January 2026, 18:30 UTC"
 //   - "9th Feb 1400 UTC" (military time, no separator)
 //   - "February 9th 19:30" or "February 9th 1930 UTC" (month-first)
+//
+// A leading weekday ("Thursday, ", "Thu ", "Mon ") is tolerated and stripped.
 func ParseJumpTime(input string) (int64, error) {
 	input = strings.TrimSpace(input)
 
@@ -372,9 +379,9 @@ func ParseJumpTime(input string) (int64, error) {
 		return ts, nil
 	}
 
-	// Strip leading day-of-week names (e.g., "Friday 20th, ..." -> "20th, ...")
-	dowPrefix := regexp.MustCompile(`(?i)^\s*(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+`)
-	input = dowPrefix.ReplaceAllString(input, "")
+	// Strip leading day-of-week prefix (e.g., "Friday 20th, ..." -> "20th, ...").
+	// Supports full and short names with optional trailing period/comma.
+	input = weekdayPrefixPattern.ReplaceAllString(input, "")
 
 	var day, hour, minute, year int
 	var monthStr, yearStr string

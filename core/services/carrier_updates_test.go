@@ -578,6 +578,9 @@ func TestParseJumpTime(t *testing.T) {
 		// Day-of-week prefix
 		{"day-of-week day first", "Friday 20th Feb, 08.30 UTC", false},
 		{"day-of-week month first", "Friday February 20th, 08:30 UTC", false},
+		{"weekday short", "Thu 23rd April, 15:30 UTC", false},
+		{"weekday with comma", "Thursday, 23rd April, 15:30 UTC", false},
+		{"weekday military short", "Mon 21 APR 1700 UTC", false},
 
 		// No month (assumes current month)
 		{"day-of-week no month", "Friday 20th, 08.30 UTC", false},
