@@ -433,6 +433,28 @@ func TestParseCarrierUpdates_FieldNameVariants(t *testing.T) {
 	}
 }
 
+func TestParseCarrierUpdates_UnknownFieldDoesNotBreakParse(t *testing.T) {
+	setupTestCarriers()
+
+	// "Fuel Status:" is not a handled field; the block must still parse the
+	// handled fields and not be rejected.
+	content := "Carrier: Pillar of Chista TBQ-6VX\n" +
+		"Fuel Status: 87%\n" +
+		"Destination System: Sol\n" +
+		"Departure: 21st April 17:30 UTC"
+	updates := ParseCarrierUpdates(content)
+
+	if len(updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(updates))
+	}
+	if updates[0].Destination == nil || *updates[0].Destination != "Sol" {
+		t.Errorf("expected Destination=Sol, got %v", updates[0].Destination)
+	}
+	if updates[0].Departure == nil || *updates[0].Departure <= 0 {
+		t.Errorf("expected Departure to be set, got %v", updates[0].Departure)
+	}
+}
+
 func TestParseCarrierUpdates_MatchByName(t *testing.T) {
 	setupTestCarriers()
 

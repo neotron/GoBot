@@ -26,6 +26,23 @@ var (
 	departurePattern   = regexp.MustCompile(`(?i)^Departure(?:\s+(?:Date|Time))?:\s*(.+)$`)
 	destinationPattern = regexp.MustCompile(`(?i)^Destination(?:\s+System)?:\s*(.+)$`)
 
+	// Matches any "Key: value" line so we can surface unknown keys in logs.
+	keyLinePattern = regexp.MustCompile(`^\s*([A-Za-z][A-Za-z0-9 /]*?)\s*:\s*(.*)$`)
+
+	// Keys we intentionally ignore (informational fields in carrier posts).
+	// Values are matched case-insensitively.
+	knownIgnoredKeys = map[string]bool{
+		"carrier":            true,
+		"current system":     true,
+		"tritium buy orders": true,
+		"tritium":            true,
+		"notes":              true,
+		"note":               true,
+		"status":             true,
+		"cargo":              true,
+		"owner":              true,
+	}
+
 	// Matches the sector + mass code part of a procedurally generated system name
 	// e.g. "MT-Q e5-8" in "Thuecheae MT-Q e5-8"
 	procGenSectorPattern = regexp.MustCompile(`(?i)([A-Z]{2}-[A-Z])\s+([A-Z]\d+-\d+)`)
@@ -223,6 +240,18 @@ func parseCarrierBlock(block string) *CarrierUpdate {
 				update.Destination = &destStr
 			}
 			continue
+		}
+
+		// Line has a "Key: value" shape but didn't match any handled field.
+		// Log at DEBUG for known-ignored keys, WARN for truly unknown ones so
+		// we can spot new field-name variants that should be handled.
+		if match := keyLinePattern.FindStringSubmatch(line); match != nil {
+			key := strings.ToLower(strings.TrimSpace(match[1]))
+			if knownIgnoredKeys[key] {
+				core.LogDebugF("Carrier %s: ignoring known field %q", stationId, match[1])
+			} else {
+				core.LogWarnF("Carrier %s: unknown field %q (line: %q)", stationId, match[1], line)
+			}
 		}
 	}
 
